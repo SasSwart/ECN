@@ -1,0 +1,72 @@
+is logo 		is moto
+
+
+
+Javascript *must* be enabled to use this site
+Here are the instructions to enable JavaScript in your web browser
+<http://www.enable-javascript.com/>.
+
+
+
+
+
+
+Administration Tasks - East Cape Net, [isdsl.net], PGIA, B 	[ Home
+<http://www.isdsl.net/tasks.php> | Logout
+<http://www.isdsl.net/logout.php> ] 
+
+	Add an ADSL account
+<http://www.isdsl.net/add_consumer_adsl.php?action=add&type=auto>
+	Email reporting options <http://www.isdsl.net/mailoptions.php>
+	Change administrator user's password
+<http://www.isdsl.net/changeadminpw.php>
+	Reports <http://www.isdsl.net/reports.php>
+
+
+
+Search Accounts - East Cape Net, [isdsl.net], PGIA, B 	
+
+Search for: 		Search 	or [ View all my accounts <#> ]
+
+Accounts
+
+Show / hide columns
+
+Show
+
+entries
+Search:
+Processing...
+User Name	User Password	Product	Status	User Comment	System Comment
+isp11895@dsl512.isdsl.net 	gftdxtxv 	ISDSL+ Hard Cap 30G 	Park201605
+Cedric Bergman ,Cdk,User:bergman 	
+isp12689@isdsl.net 	rlshzaff 	ISDSL+ Hard Cap 9G 	used 	Hester Coetzer 	
+isp14448@isdsl.net 	*#58734@*# 	ISDSL+ Hard Cap 35G 	used 	Abattoir
+Cradock 	
+isp14720@isdsl.net 	atecybjw 	ISDSL+ Hard Cap 15G 	used 	JW Geyer 	
+isp14920@isdsl.net 	gjjxybwe 	ISDSL+ Hard Cap 17G 	Park201605 	Bergman
+Fort Beaufort Kantore 	
+isp19060@dsl512.isdsl.net 	qmllzzej 	ISDSL+ Hard Cap 5G 	h_cap 	Herman
+Neethling (Email - Wilmene) 	Hard Capped, Used Over 5 GB - Thu May 19
+20:05:03 SAST 2016
+isp20146@dsl512.isdsl.net 	mwslgtdk 	ISDSL+ Hard Cap 10G 	used 	Herman
+Neethling (Email - Herman) 	
+isp26899@dsl512.isdsl.net 	wwxryfui 	ISDSL+ Hard Cap 20G => ISDSL+ Hard
+Cap 15G 	used 	daybreak-Frikkie Naude 	
+isp33138@dsl512.isdsl.net 	lpuwxnlb 	ISDSL+ Hard Cap 10G 	used 	Custom
+Motors, Beverly 	
+
+Showing 1 to 9 of 9 entries
+FirstPrevious1NextLast
+
+
+
+Documentation <http://www.isdsl.net/doc.php> Release 15.08.03
+
+<#>
+Processingclose
+Please wait...
+Notice
+close
+
+Close

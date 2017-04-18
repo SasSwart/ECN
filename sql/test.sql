@@ -1,0 +1,6 @@
+SHOW DATABASES;
+USE `ecn`;
+SHOW COLUMNS FROM `client`;
+SHOW COLUMNS FROM `supplier`;
+SHOW COLUMNS FROM `service`;
+SHOW COLUMNS FROM `subscription`;
