@@ -41,5 +41,21 @@ CREATE TABLE `subscription` (
     FOREIGN KEY (`client`) REFERENCES `client`(`code`),
     FOREIGN KEY (`service`) REFERENCES `service`(`code`)
 );
-/*CREATE TABLE `sales_invoice` ();
-/*CREATE TABLE `supplier_invoice` ();*/
+CREATE TABLE `sales_invoice` (
+	`code` INTEGER NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    `number` VARCHAR(6),
+    `date` DATE,
+    `client` VARCHAR(6),
+    `service` VARCHAR(6),
+    FOREIGN KEY (`client`) REFERENCES `client`(`code`),
+    FOREIGN KEY (`service`) REFERENCES `service`(`code`)
+);
+CREATE TABLE `supplier_invoice` (
+	`code` INTEGER NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    `number` VARCHAR(6),
+    `date` DATE,
+    `supplier` VARCHAR(6),
+    `service` VARCHAR(6),
+    FOREIGN KEY (`supplier`) REFERENCES `supplier`(`code`),
+    FOREIGN KEY (`service`) REFERENCES `service`(`code`)
+);

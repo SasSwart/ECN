@@ -1,6 +1,6 @@
 SHOW DATABASES;
 USE `ecn`;
-SHOW COLUMNS FROM `client`;
-SHOW COLUMNS FROM `supplier`;
-SHOW COLUMNS FROM `service`;
-SHOW COLUMNS FROM `subscription`;
+DESCRIBE `client`;
+DESCRIBE `supplier`;
+DESCRIBE `service`;
+DESCRIBE `subscription`;
