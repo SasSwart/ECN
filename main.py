@@ -1,5 +1,9 @@
 import mysql.connector
 
+host = "sql0"
+user = "root"
+passw = "Hunt!ngSpr!ngbuck123"
+
 
 def connect(user, password, host):
     # Connect to local Database
@@ -11,34 +15,30 @@ def connect(user, password, host):
         cur = conn.cursor()
         return conn, cur, None
 
+con, cur, error = connect(user, passw, host)
+
+cur.execute(
+    "SELECT \
+        service.description,\
+        cost_price,\
+        sales_price,\
+        subscription.qty,\
+        first_name, \
+        last_name,\
+        company,\
+        client.code,\
+        subscription.service,\
+        service.supplier,\
+        service.type\
+    FROM ecn.client, ecn.subscription, ecn.service, ecn.service_type \
+    where ecn.client.code = ecn.subscription.client \
+    and ecn.service.type = ecn.service_type.type \
+    and ecn.subscription.service = ecn.service.code;")
+
+subsHeader = cur.column_names
+subs = cur.fetchall()
 
 def is_Domain():
-    host = "sql0"
-    user = "root"
-    passw = "Hunt!ngSpr!ngbuck123"
-
-    con, cur, error = connect(user, passw, host)
-
-    cur.execute(
-        "SELECT \
-            subscription.description,\
-            cost_price,\
-            sales_price,\
-            subscription.qty,\
-            first_name, \
-            last_name,\
-            company,\
-            client.code,\
-            subscription.service,\
-            service.supplier,\
-            service.type\
-        FROM ecn.client, ecn.subscription, ecn.service, ecn.service_type \
-        where ecn.client.code = ecn.subscription.client \
-        and ecn.service.type = ecn.service_type.type \
-        and ecn.subscription.service = ecn.service.code;")
-    subsHeader = cur.column_names
-    subs = cur.fetchall()
-
     report = "IS Domain Reconciliation\n"
     report += " {:^30} {:^3} {:^10} {:^10} {:^30} \n".format("Description", "Qty", "Cost", "Sales", "Client")
     hl = "-"*89 + "\n"
@@ -53,7 +53,6 @@ def is_Domain():
             total_cost += (sub[1] if sub[1] is not None else 0) * (sub[3] if sub[3] is not None else 0)
             total_sales += (sub[2] if sub[2] is not None else 0) * (sub[3] if sub[3] is not None else 0)
             total_qty += (sub[3] if sub[3] is not None else 0)
-            name = ""
             if sub[6] is None:
                 name = (sub[4] if sub[4] is not None else "") + " " + (sub[5] if sub[5] is not None else "")
             else:
@@ -66,32 +65,6 @@ def is_Domain():
 
 
 def is_Mobile():
-    host = "sql0"
-    user = "root"
-    passw = "Hunt!ngSpr!ngbuck123"
-
-    con, cur, error = connect(user, passw, host)
-
-    cur.execute(
-        "SELECT \
-            service.description,\
-            cost_price,\
-            sales_price,\
-            subscription.qty,\
-            first_name, \
-            last_name,\
-            company,\
-            client.code,\
-            subscription.service,\
-            service.supplier,\
-            service.type\
-        FROM ecn.client, ecn.subscription, ecn.service, ecn.service_type \
-        where ecn.client.code = ecn.subscription.client \
-        and ecn.service.type = ecn.service_type.type \
-        and ecn.subscription.service = ecn.service.code;")
-    subsHeader = cur.column_names
-    subs = cur.fetchall()
-
     report = "IS Mobile Reconciliation\n"
     report += " {:^30} {:^3} {:^10} {:^10} {:^30} \n".format("Description", "Qty", "Cost", "Sales", "Client")
     hl = "-"*89 + "\n"
@@ -106,7 +79,6 @@ def is_Mobile():
             total_cost += (sub[1] if sub[1] is not None else 0) * (sub[3] if sub[3] is not None else 0)
             total_sales += (sub[2] if sub[2] is not None else 0) * (sub[3] if sub[3] is not None else 0)
             total_qty += (sub[3] if sub[3] is not None else 0)
-            name = ""
             if sub[6] is None:
                 name = (sub[4] if sub[4] is not None else "") + " " + (sub[5] if sub[5] is not None else "")
             else:
@@ -119,32 +91,6 @@ def is_Mobile():
 
 
 def is_ADSL():
-    host = "sql0"
-    user = "root"
-    passw = "Hunt!ngSpr!ngbuck123"
-
-    con, cur, error = connect(user, passw, host)
-
-    cur.execute(
-        "SELECT \
-            service.description,\
-            cost_price,\
-            sales_price,\
-            subscription.qty,\
-            first_name, \
-            last_name,\
-            company,\
-            client.code,\
-            subscription.service,\
-            service.supplier,\
-            service.type\
-        FROM ecn.client, ecn.subscription, ecn.service, ecn.service_type \
-        where ecn.client.code = ecn.subscription.client \
-        and ecn.service.type = ecn.service_type.type \
-        and ecn.subscription.service = ecn.service.code;")
-    subsHeader = cur.column_names
-    subs = cur.fetchall()
-
     report = "IS Per Account Reconciliation\n"
     report += " {:^30} {:^3} {:^10} {:^10} {:^30} \n".format("Description", "Qty", "Cost", "Sales", "Client")
     hl = "-"*89 + "\n"
@@ -159,7 +105,6 @@ def is_ADSL():
             total_cost += (sub[1] if sub[1] is not None else 0) * (sub[3] if sub[3] is not None else 0)
             total_sales += (sub[2] if sub[2] is not None else 0) * (sub[3] if sub[3] is not None else 0)
             total_qty += (sub[3] if sub[3] is not None else 0)
-            name = ""
             if sub[6] is None:
                 name = (sub[4] if sub[4] is not None else "") + " " + (sub[5] if sub[5] is not None else "")
             else:
@@ -198,32 +143,6 @@ def is_ADSL():
 
 
 def axxess():
-    host = "sql0"
-    user = "root"
-    passw = "Hunt!ngSpr!ngbuck123"
-
-    con, cur, error = connect(user, passw, host)
-
-    cur.execute(
-        "SELECT \
-            service.description,\
-            cost_price,\
-            sales_price,\
-            subscription.qty,\
-            first_name, \
-            last_name,\
-            company,\
-            client.code,\
-            subscription.service,\
-            service.supplier,\
-            service.type\
-        FROM ecn.client, ecn.subscription, ecn.service, ecn.service_type \
-        where ecn.client.code = ecn.subscription.client \
-        and ecn.service.type = ecn.service_type.type \
-        and ecn.subscription.service = ecn.service.code;")
-    subsHeader = cur.column_names
-    subs = cur.fetchall()
-
     report = "IS Per Account Reconciliation\n"
     report += " {:^30} {:^3} {:^10} {:^10} {:^30} \n".format("Description", "Qty", "Cost", "Sales", "Client")
     hl = "-" * 89 + "\n"
@@ -237,7 +156,6 @@ def axxess():
             total_cost += (sub[1] if sub[1] is not None else 0) * (sub[3] if sub[3] is not None else 0)
             total_sales += (sub[2] if sub[2] is not None else 0) * (sub[3] if sub[3] is not None else 0)
             total_qty += (sub[3] if sub[3] is not None else 0)
-            name = ""
             if sub[6] is None:
                 name = (sub[4] if sub[4] is not None else "") + " " + (sub[5] if sub[5] is not None else "")
             else:
