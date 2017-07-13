@@ -6,6 +6,8 @@ host = "192.168.0.33"
 user = "root"
 passw = "Hunt!ngSpr!ngbuck123"
 
+page = (85,58)
+
 
 def connect(user, password, host):
     # Connect to local Database
@@ -24,27 +26,6 @@ def md5(fname):
     return hash_md5.hexdigest()
 
 con, cur, error = connect(user, passw, host)
-
-cur.execute(
-    "SELECT \
-        service.description,\
-        cost_price,\
-        sales_price,\
-        subscription.qty,\
-        first_name, \
-        last_name,\
-        company,\
-        client.code,\
-        subscription.service,\
-        service.supplier,\
-        service.type\
-    FROM ecn.client, ecn.subscription, ecn.service, ecn.service_type \
-    where ecn.client.code = ecn.subscription.client \
-    and ecn.service.type = ecn.service_type.type \
-    and ecn.subscription.service = ecn.service.code;")
-
-subsHeader = cur.column_names
-subs = cur.fetchall()
 
 
 def save_file():
@@ -70,6 +51,26 @@ def default_report(title,
                    subscription='',
                    supplier=None,
                    line_width=89):
+    cur.execute(
+        "SELECT \
+            service.description,\
+            cost_price,\
+            sales_price,\
+            subscription.qty,\
+            first_name, \
+            last_name,\
+            company,\
+            client.code,\
+            subscription.service,\
+            service.supplier,\
+            service.type\
+        FROM ecn.client, ecn.subscription, ecn.service, ecn.service_type \
+        where ecn.client.code = ecn.subscription.client \
+        and ecn.service.type = ecn.service_type.type \
+        and ecn.subscription.service = ecn.service.code;")
+    subsHeader = cur.column_names
+    subs = cur.fetchall()
+
     report = ['{}\n{:^30} {:^3} {:^10} {:^10} {:^30} \n'.format(title, 'Description', 'Qty', 'Cost', 'Sales', 'Client')]
     hl = '-' * line_width + '\n'
     report.append(hl)
@@ -166,7 +167,7 @@ def client_totals():
 
 
 def client_invoice(client, me):
-    report = "\n"
+    report = "\n\n\n"
     cur.execute("SELECT \n"
                 "   me.code,\n"
                 "   first_name,\n"
@@ -270,10 +271,11 @@ def client_invoice(client, me):
     report += hl
     report += "|{:<40}  {:>3}|{:>10}|{:>10}|{:>10}|\n"\
         .format("Totals", "", str(round(total_exvat,2)), str(round(total_vat,2)), str(round(total_sales,2)))
-    report += hl
+    report += hl + "\n\n"
 
-    report = "\n".join(["{:^85}".format(line) for line in report.split('\n')])
-    print(report)
+    lines = report.split('\n')[2:-2]
+    report = "\n".join([str("{:^"+str(page[0])+"}").format(line) for line in lines]) + "\n"*(page[1]-len(lines)%page[1])
+    return report, total_sales
 
 
 def service_totals(supplier):
@@ -322,6 +324,21 @@ def service_totals(supplier):
 
         print(report)
 
+
+def monthly_accounts_per_client(PRINT_ZEROES=False):
+    report = []
+    cur.execute(
+        "SELECT\
+            client.code\
+        FROM ecn.client;")
+    subs = cur.fetchall()
+
+    for sub in subs:
+        invoice = client_invoice(sub[0], "ecn001")
+        if invoice[1] > 0 or PRINT_ZEROES:
+            report.append(invoice[0])
+    return report
+
 # axxess()
 
 # internet_solution_adsl()
@@ -334,4 +351,7 @@ def service_totals(supplier):
 
 # client_totals()
 
-client_invoice('ort001', 'ecn001')
+
+invoices = monthly_accounts_per_client()
+for invoice in invoices:
+    print(invoice)
