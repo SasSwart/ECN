@@ -339,6 +339,47 @@ def monthly_accounts_per_client(PRINT_ZEROES=False):
             report.append(invoice[0])
     return report
 
+
+class Form(object):
+    def __init__(self, width):
+        self.width = width
+        self.lines = []
+
+    def _span(self, f_string=None, index=None, delimiter='<'):
+        if index is None:
+            self.lines.append([delimiter, '' if f_string is None else f_string])
+        else:
+            if f_string is None:
+                self.lines[index][0] = delimiter
+            else:
+                self.lines[index] = [delimiter, f_string]
+        return self
+
+    def push(self, f_string='', index=None):
+        return self._span(f_string=f_string, index=index, delimiter='<')
+
+    def pull(self, f_string=None, index=None):
+        return self._span(f_string=f_string, index=index, delimiter='>')
+
+    def plod(self, f_string='', index=None):
+        return self._span(f_string=f_string, index=index, delimiter='^')
+
+    def fill(self, data):
+        write = []
+        for a, b in zip(self.lines, data):
+            (x, y), z = a, b
+            write.append(('{:' + str(x) + str(self.width) + '}').format(y.format(z)))
+        return '\n'.join(write)
+
+f = Form(23)
+f.plod('{:>3}').plod('{:>3}').plod('{:>3}').pull('{:<3}').push('{:<3}')
+print(f.fill(('1', '1', '1', '1', '1')))
+
+g = Form(23)
+g.push('{:<3}').pull('{:<3}').plod('{:>3}').plod('{:>3}').plod('{:>3}')
+print(g.fill(('1', '1', '1', '1', '1')))
+
+
 # axxess()
 
 # internet_solution_adsl()
