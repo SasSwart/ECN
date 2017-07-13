@@ -2,7 +2,7 @@ import mysql.connector
 import datetime
 import hashlib
 
-host = "sql0"
+host = "192.168.0.33"
 user = "root"
 passw = "Hunt!ngSpr!ngbuck123"
 
@@ -52,7 +52,7 @@ def save_file():
 
 
 def parse_sub(sub):
-    fields = ('description', 'cost', 'sales', 'qty', 'fname', 'lname', 'company')
+    fields = ('description', 'cost', 'sales', 'qty', 'f_name', 'l_name', 'company')
     values = {k: (0 if v is None else v) for k, v in zip(fields, sub[:7])}
 
     cost = values['cost'] * values['qty']
@@ -61,8 +61,8 @@ def parse_sub(sub):
     if values['company']:
         name = values['company']
     else:
-        fname, lname = values['fname'], values['lname']
-        name = (fname if fname else '') + (lname if lname else '')
+        f_name, l_name = values['f_name'], values['l_name']
+        name = (f_name if f_name else '') + (l_name if l_name else '')
     return values['description'], cost, sales, values['qty'], name
 
 
@@ -74,9 +74,7 @@ def default_report(title,
     hl = '-' * line_width + '\n'
     report.append(hl)
 
-    total_cost = 0
-    total_sales = 0
-    total_qty = 0
+    total_cost, total_sales, total_qty = 0, 0, 0
     for sub in subs:
         subscription_flag = True if subscription is '' else sub[-1] in subscription.split(', ')
         supplier_flag = True if supplier is None else sub[-2] == supplier
@@ -106,7 +104,7 @@ def internet_solutions_mobile():
                          supplier='is0001'))
 
 
-def is_adsl():
+def internet_solution_adsl():
     print(default_report(title='IS Per Account Reconciliation',
                          subscription='peracc, uncapped',
                          supplier='is0001'))
@@ -186,7 +184,7 @@ def client_invoice(client, me):
         name = subs[0][3]
     date = datetime.datetime.now()
     address = (subs[0][5] if subs[0][5] is not None else (subs[0][6] if subs[0][6] is not None else ""))
-    address = address.split(', ')
+    address = (['', '', ''] if address == '' else address.split(', '))
 
     report += "{:<30}     {:^15}     {:>25}\n"\
         .format(name, "Tax Invoice", str(date.year) + "-" + str(date.month) + "-" + str(date.day))
@@ -197,6 +195,37 @@ def client_invoice(client, me):
     report += "{:<30}     {:^15}     {:>25}\n"\
         .format(address[2], "", "")
     report += "{:<30}     {:^15}     {:>25}\n"\
+        .format("VAT: " + (subs[0][4] if subs[0][4] is not None else ""), "", "")
+    report += "\n\n"
+
+    cur.execute("SELECT \n"
+                "   client.code,\n"
+                "   first_name,\n"
+                "   last_name,\n"
+                "   company,\n"
+                "   vat,\n"
+                "   physical_address,\n"
+                "   postal_address\n"
+                "FROM ecn.client\n"
+                "where ecn.client.code = '" + client + "';")
+    subs = cur.fetchall()
+    if subs[0][3] is None:
+        name = (subs[0][1] if subs[0][1] is not None else "") + " " + (subs[0][2] if subs[0][2] is not None else "")
+    else:
+        name = subs[0][3]
+    date = datetime.datetime.now()
+    address = (subs[0][5] if subs[0][5] is not None else (subs[0][6] if subs[0][6] is not None else ""))
+    address = (['', '', ''] if address == '' else address.split(', '))
+
+    report += "{:<30}     {:^15}     {:>25}\n" \
+        .format(name, "Tax Invoice", str(date.year) + "-" + str(date.month) + "-" + str(date.day))
+    report += "{:<30}     {:^15}     {:>25}\n" \
+        .format(address[0], "Nr." + md5(str(date).encode())[:10], "Code: " + subs[0][0])
+    report += "{:<30}     {:^15}     {:>25}\n" \
+        .format(address[1], "", "")
+    report += "{:<30}     {:^15}     {:>25}\n" \
+        .format(address[2], "", "")
+    report += "{:<30}     {:^15}     {:>25}\n" \
         .format("VAT: " + (subs[0][4] if subs[0][4] is not None else ""), "", "")
     report += "\n\n"
 
@@ -293,16 +322,16 @@ def service_totals(supplier):
 
         print(report)
 
-axxess()
+# axxess()
 
-# is_ADSL()
+# internet_solution_adsl()
 
-# is_Domain()
+# internet_solutions_domain()
 
-# is_Mobile()
+# internet_solutions_mobile()
 
 # service_totals("is0001")
 
 # client_totals()
 
-# client_invoice("ort001")
+client_invoice('ort001', 'ecn001')
