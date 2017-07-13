@@ -48,137 +48,78 @@ subs = cur.fetchall()
 
 
 def save_file():
-    ()
+    pass
 
 
-def is_Domain():
-    report = "IS Domain Reconciliation\n"
-    report += " {:^30} {:^3} {:^10} {:^10} {:^30} \n".format("Description", "Qty", "Cost", "Sales", "Client")
-    hl = "-"*89 + "\n"
-    report += hl
+def parse_sub(sub):
+    fields = ('description', 'cost', 'sales', 'qty', 'fname', 'lname', 'company')
+    values = {k: (0 if v is None else v) for k, v in zip(fields, sub[:7])}
 
-    total_cost = 0
-    total_sales = 0
-    total_qty = 0
-    for sub in subs:
-        if (sub[-1] == 'domain')\
-        and sub[-2] == 'is0001':
-            total_cost += (sub[1] if sub[1] is not None else 0) * (sub[3] if sub[3] is not None else 0)
-            total_sales += (sub[2] if sub[2] is not None else 0) * (sub[3] if sub[3] is not None else 0)
-            total_qty += (sub[3] if sub[3] is not None else 0)
-            if sub[6] is None:
-                name = (sub[4] if sub[4] is not None else "") + " " + (sub[5] if sub[5] is not None else "")
-            else:
-                name = sub[6]
-            report += "|{:<30}|{:^3}|{:>10}|{:>10}|{:>30}|\n".format(str(sub[0]), str(sub[3]), str(sub[1] * sub[3]), str(sub[2] * sub[3]), name)
-    report += hl
-    report += " {:<30} {:^3} {:>10} {:>10}\n".format("Total", str(total_qty), str(total_cost), str(total_sales))
+    cost = values['cost'] * values['qty']
+    sales = values['sales'] * values['qty']
 
-    print(report)
+    if values['company']:
+        name = values['company']
+    else:
+        fname, lname = values['fname'], values['lname']
+        name = (fname if fname else '') + (lname if lname else '')
+    return values['description'], cost, sales, values['qty'], name
 
 
-def is_Mobile():
-    report = "IS Mobile Reconciliation\n"
-    report += " {:^30} {:^3} {:^10} {:^10} {:^30} \n".format("Description", "Qty", "Cost", "Sales", "Client")
-    hl = "-"*89 + "\n"
-    report += hl
+def default_report(title,
+                   subscription='',
+                   supplier=None,
+                   line_width=89):
+    report = ['{}\n{:^30} {:^3} {:^10} {:^10} {:^30} \n'.format(title, 'Description', 'Qty', 'Cost', 'Sales', 'Client')]
+    hl = '-' * line_width + '\n'
+    report.append(hl)
 
     total_cost = 0
     total_sales = 0
     total_qty = 0
     for sub in subs:
-        if (sub[-1] == 'mobile')\
-        and sub[-2] == 'is0001':
-            total_cost += (sub[1] if sub[1] is not None else 0) * (sub[3] if sub[3] is not None else 0)
-            total_sales += (sub[2] if sub[2] is not None else 0) * (sub[3] if sub[3] is not None else 0)
-            total_qty += (sub[3] if sub[3] is not None else 0)
-            if sub[6] is None:
-                name = (sub[4] if sub[4] is not None else "") + " " + (sub[5] if sub[5] is not None else "")
-            else:
-                name = sub[6]
-            report += "|{:<30}|{:^3}|{:>10}|{:>10}|{:>30}|\n".format(str(sub[0]), str(sub[3]), str(sub[1] * sub[3]), str(sub[2] * sub[3]), name)
-    report += hl
-    report += " {:<30} {:^3} {:>10} {:>10}\n".format("Total", str(total_qty), str(total_cost), str(total_sales))
+        subscription_flag = True if subscription is '' else sub[-1] in subscription.split(', ')
+        supplier_flag = True if supplier is None else sub[-2] == supplier
 
-    print(report)
+        if subscription_flag and supplier_flag:
+            description, cost, sales, qty, name = parse_sub(sub)
+
+            total_cost += cost
+            total_sales += sales
+            total_qty += qty
+
+            report.append('|{:<30}|{:^3}|{:>10}|{:>10}|{:>30}|\n'.format(description, qty, cost, sales, name))
+    report.append(hl)
+    report.append(' {:<30} {:^3} {:>10} {:>10}\n'.format('Total', str(total_qty), str(total_cost), str(total_sales)))
+    return ''.join(report)
 
 
-def is_ADSL():
-    report = "IS Per Account Reconciliation\n"
-    report += " {:^30} {:^3} {:^10} {:^10} {:^30} \n".format("Description", "Qty", "Cost", "Sales", "Client")
-    hl = "-"*89 + "\n"
-    report += hl
+def internet_solutions_domain():
+    print(default_report(title='IS Domain Reconciliation',
+                         subscription='domain',
+                         supplier='is0001'))
 
-    total_cost = 0
-    total_sales = 0
-    total_qty = 0
-    for sub in subs:
-        if (sub[-1] == 'peracc' or sub[-1] == 'uncapped')\
-        and sub[-2] == 'is0001':
-            total_cost += (sub[1] if sub[1] is not None else 0) * (sub[3] if sub[3] is not None else 0)
-            total_sales += (sub[2] if sub[2] is not None else 0) * (sub[3] if sub[3] is not None else 0)
-            total_qty += (sub[3] if sub[3] is not None else 0)
-            if sub[6] is None:
-                name = (sub[4] if sub[4] is not None else "") + " " + (sub[5] if sub[5] is not None else "")
-            else:
-                name = sub[6]
-            report += "|{:<30}|{:^3}|{:>10}|{:>10}|{:>30}|\n".format(str(sub[0]), str(sub[3]), str(sub[1] * sub[3]), str(sub[2] * sub[3]), name)
-    report += hl
-    report += " {:<30} {:^3} {:>10} {:>10}\n".format("Total", str(total_qty), str(total_cost), str(total_sales))
 
-    print(report)
+def internet_solutions_mobile():
+    print(default_report(title='IS Mobile Reconciliation',
+                         subscription='mobile',
+                         supplier='is0001'))
 
-    report = "IS Per GB Reconciliation\n"
-    report += " {:^30} {:^3} {:^10} {:^10} {:^30} \n".format("Description", "Qty", "Cost", "Sales", "Client")
-    hl = "-" * 89 + "\n"
-    report += hl
 
-    total_cost = 0
-    total_sales = 0
-    total_qty = 0
-    for sub in subs:
-        if (sub[-1] == 'pergb') \
-                and sub[-2] == 'is0001':
-            total_cost += (sub[1] if sub[1] is not None else 0) * (sub[3] if sub[3] is not None else 0)
-            total_sales += (sub[2] if sub[2] is not None else 0) * (sub[3] if sub[3] is not None else 0)
-            total_qty += (sub[3] if sub[3] is not None else 0)
-            name = ""
-            if sub[6] is None:
-                name = (sub[4] if sub[4] is not None else "") + " " + (sub[5] if sub[5] is not None else "")
-            else:
-                name = sub[6]
-            report += "|{:<30}|{:^3}|{:>10}|{:>10}|{:>30}|\n".format(str(sub[0]), str(sub[3]), str(sub[1] * sub[3]),
-                                                                     str(sub[2] * sub[3]), name)
-    report += hl
-    report += "{:<30} {:^3} {:>10} {:>10}\n".format("Total", str(total_qty), str(total_cost), str(total_sales))
+def is_adsl():
+    print(default_report(title='IS Per Account Reconciliation',
+                         subscription='peracc, uncapped',
+                         supplier='is0001'))
 
-    print(report)
+    print(default_report(title='IS Per GB Reconciliation',
+                         subscription='pergb',
+                         supplier='is0001'))
 
 
 def axxess():
-    report = "Axxess Reconciliation\n"
-    report += " {:^30} {:^3} {:^10} {:^10} {:^30} \n".format("Description", "Qty", "Cost", "Sales", "Client")
-    hl = "-" * 89 + "\n"
-    report += hl
+    print(default_report(title='Axxess Reconciliation',
+                         supplier='axx001'))
 
-    total_cost = 0
-    total_sales = 0
-    total_qty = 0
-    for sub in subs:
-        if sub[-2] == 'axx001':
-            total_cost += (sub[1] if sub[1] is not None else 0) * (sub[3] if sub[3] is not None else 0)
-            total_sales += (sub[2] if sub[2] is not None else 0) * (sub[3] if sub[3] is not None else 0)
-            total_qty += (sub[3] if sub[3] is not None else 0)
-            if sub[6] is None:
-                name = (sub[4] if sub[4] is not None else "") + " " + (sub[5] if sub[5] is not None else "")
-            else:
-                name = sub[6]
-            report += "|{:<30}|{:^3}|{:>10}|{:>10}|{:>30}|\n".format(str(sub[0]), str(sub[3]), str(sub[1] * sub[3]),
-                                                                     str(sub[2] * sub[3]), name)
-    report += hl
-    report += " {:<30} {:^3} {:>10} {:>10}\n".format("Total", str(total_qty), str(total_cost), str(total_sales))
-
-    print(report)
 
 def client_totals():
     cur.execute(
@@ -200,7 +141,7 @@ def client_totals():
         and ecn.subscription.service = ecn.service.code\
         group by client.code;")
 
-    subsHeader = cur.column_names
+    subs_header = cur.column_names
     subs = cur.fetchall()
 
     report = "Client Totals\n"
@@ -226,25 +167,25 @@ def client_totals():
     print(report)
 
 
-def client_invoice(client):
+def client_invoice(client, me):
     report = "\n"
     cur.execute("SELECT \n"
-                "   client.code,\n"
+                "   me.code,\n"
                 "   first_name,\n"
                 "   last_name,\n"
                 "   company,\n"
                 "   vat,\n"
                 "   physical_address,\n"
                 "   postal_address\n"
-                "FROM ecn.client\n"
-                "where ecn.client.code = '"+client+"';")
+                "FROM ecn.me\n"
+                "where ecn.me.code = '"+me+"';")
     subs = cur.fetchall()
     if subs[0][3] is None:
         name = (subs[0][1] if subs[0][1] is not None else "") + " " + (subs[0][2] if subs[0][2] is not None else "")
     else:
-        name =  subs[0][3]
+        name = subs[0][3]
     date = datetime.datetime.now()
-    address = (subs[0][5] if subs[0][5] is not None else ((subs[0][6] if subs[0][6] is not None else "")))
+    address = (subs[0][5] if subs[0][5] is not None else (subs[0][6] if subs[0][6] is not None else ""))
     address = address.split(', ')
 
     report += "{:<30}     {:^15}     {:>25}\n"\
@@ -352,16 +293,16 @@ def service_totals(supplier):
 
         print(report)
 
-#axxess()
+axxess()
 
-#is_ADSL()
+# is_ADSL()
 
-#is_Domain()
+# is_Domain()
 
-#is_Mobile()
+# is_Mobile()
 
-#service_totals("is0001")
+# service_totals("is0001")
 
-#client_totals()
+# client_totals()
 
-client_invoice("ort001")
+# client_invoice("ort001")
