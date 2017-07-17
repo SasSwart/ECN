@@ -8,6 +8,9 @@ p_word = "Hunt!ngSpr!ngbuck123"
 
 page = (85, 58)
 
+def replace_None(value, alternate_value):
+    return (value if value is not None else alternate_value)
+
 
 def md5(f_name):
     hash_md5 = hashlib.md5()
@@ -189,17 +192,13 @@ def client_invoice(client, me):
     address = (subs[0]['physical_address'] if subs[0]['physical_address'] is not None else (subs[0]['postal_address'] if subs[0]['postal_address'] is not None else ""))
     address = (['', '', ''] if address == '' else address.split(', '))
 
-    report += "{:<30}     {:^15}     {:>25}\n"\
-        .format(name, "Tax Invoice", str(date.year) + "-" + str(date.month) + "-" + str(date.day))
-    report += "{:<30}     {:^15}     {:>25}\n"\
-        .format(address[0], "Nr." + md5(str(date).encode())[:10], "Code: " + subs[0]['code'])
-    report += "{:<30}     {:^15}     {:>25}\n"\
-        .format(address[1], "", "")
-    report += "{:<30}     {:^15}     {:>25}\n"\
-        .format(address[2], "", "")
-    report += "{:<30}     {:^15}     {:>25}\n"\
-        .format("VAT: " + (subs[0]['vat'] if subs[0]['vat'] is not None else ""), "", "")
-    report += "\n\n"
+    header_line = "{:<30}     {:^15}     {:>25}\n"
+    report += (header_line * 5+"\n\n").format(
+        name, "", "",
+        address[0], "", "Code: " + subs[0]['code'],
+        address[1], "", "",
+        address[2], "", "",
+                        "VAT: " + (subs[0]['vat'] if subs[0]['vat'] is not None else ""), "", "")
 
     subs = run_query(conn,
                      "SELECT \n"
@@ -222,16 +221,12 @@ def client_invoice(client, me):
     subs[0]['postal_address'] if subs[0]['postal_address'] is not None else ""))
     address = (['', '', ''] if address == '' else address.split(', '))
 
-    report += "{:<30}     {:^15}     {:>25}\n" \
-        .format(name, "", "")
-    report += "{:<30}     {:^15}     {:>25}\n" \
-        .format(address[0], "", "Code: " + subs[0]['code'])
-    report += "{:<30}     {:^15}     {:>25}\n" \
-        .format(address[1], "", "")
-    report += "{:<30}     {:^15}     {:>25}\n" \
-        .format(address[2], "", "")
-    report += "{:<30}     {:^15}     {:>25}\n" \
-        .format("VAT: " + (subs[0]['vat'] if subs[0]['vat'] is not None else ""), "", "")
+    report += (header_line * 5+"\n\n").format(
+                name,       "", "",
+                address[0], "", "Code: " + subs[0]['code'],
+                address[1], "", "",
+                address[2], "", "",
+                "VAT: " + (subs[0]['vat'] if subs[0]['vat'] is not None else ""), "", "")
     report += "\n\n"
 
     subs = run_query(conn,
