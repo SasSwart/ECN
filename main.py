@@ -168,7 +168,9 @@ def client_totals():
 
 def client_invoice(client, me):
     report = "\n\n\n"
-    cur.execute("SELECT \n"
+
+    subs = run_query(conn,
+                "SELECT \n"
                 "   me.code,\n"
                 "   first_name,\n"
                 "   last_name,\n"
@@ -178,59 +180,61 @@ def client_invoice(client, me):
                 "   postal_address\n"
                 "FROM ecn.me\n"
                 "where ecn.me.code = '" + me + "';")
-    subs = cur.fetchall()
-    if subs[0][3] is None:
-        name = (subs[0][1] if subs[0][1] is not None else "") + " " + (subs[0][2] if subs[0][2] is not None else "")
+
+    if subs[0]['company'] is None:
+        name = (subs[0]['first_name'] if subs[0]['first_name'] is not None else "") + " " + (subs[0]['last_name'] if subs[0]['last_name'] is not None else "")
     else:
-        name = subs[0][3]
+        name = subs[0]['company']
     date = datetime.datetime.now()
-    address = (subs[0][5] if subs[0][5] is not None else (subs[0][6] if subs[0][6] is not None else ""))
+    address = (subs[0]['physical_address'] if subs[0]['physical_address'] is not None else (subs[0]['postal_address'] if subs[0]['postal_address'] is not None else ""))
     address = (['', '', ''] if address == '' else address.split(', '))
 
     report += "{:<30}     {:^15}     {:>25}\n"\
         .format(name, "Tax Invoice", str(date.year) + "-" + str(date.month) + "-" + str(date.day))
     report += "{:<30}     {:^15}     {:>25}\n"\
-        .format(address[0], "Nr." + md5(str(date).encode())[:10], "Code: " + subs[0][0])
+        .format(address[0], "Nr." + md5(str(date).encode())[:10], "Code: " + subs[0]['code'])
     report += "{:<30}     {:^15}     {:>25}\n"\
         .format(address[1], "", "")
     report += "{:<30}     {:^15}     {:>25}\n"\
         .format(address[2], "", "")
     report += "{:<30}     {:^15}     {:>25}\n"\
-        .format("VAT: " + (subs[0][4] if subs[0][4] is not None else ""), "", "")
+        .format("VAT: " + (subs[0]['vat'] if subs[0]['vat'] is not None else ""), "", "")
     report += "\n\n"
 
-    cur.execute("SELECT \n"
-                "   client.code,\n"
-                "   first_name,\n"
-                "   last_name,\n"
-                "   company,\n"
-                "   vat,\n"
-                "   physical_address,\n"
-                "   postal_address\n"
-                "FROM ecn.client\n"
-                "where ecn.client.code = '" + client + "';")
-    subs = cur.fetchall()
-    if subs[0][3] is None:
-        name = (subs[0][1] if subs[0][1] is not None else "") + " " + (subs[0][2] if subs[0][2] is not None else "")
+    subs = run_query(conn,
+                     "SELECT \n"
+                     "   client.code,\n"
+                     "   first_name,\n"
+                     "   last_name,\n"
+                     "   company,\n"
+                     "   vat,\n"
+                     "   physical_address,\n"
+                     "   postal_address\n"
+                     "FROM ecn.client\n"
+                     "where ecn.client.code = '" + client + "';"
+                     )
+    if subs[0]['company'] is None:
+        name = (subs[0]['first_name'] if subs[0]['first_name'] is not None else "") + " " + (subs[0]['last_name'] if subs[0]['last_name'] is not None else "")
     else:
-        name = subs[0][3]
+        name = subs[0]['company']
     date = datetime.datetime.now()
-    address = (subs[0][5] if subs[0][5] is not None else (subs[0][6] if subs[0][6] is not None else ""))
+    address = (subs[0]['physical_address'] if subs[0]['physical_address'] is not None else (
+    subs[0]['postal_address'] if subs[0]['postal_address'] is not None else ""))
     address = (['', '', ''] if address == '' else address.split(', '))
 
     report += "{:<30}     {:^15}     {:>25}\n" \
         .format(name, "", "")
     report += "{:<30}     {:^15}     {:>25}\n" \
-        .format(address[0], "", "Code: " + subs[0][0])
+        .format(address[0], "", "Code: " + subs[0]['code'])
     report += "{:<30}     {:^15}     {:>25}\n" \
         .format(address[1], "", "")
     report += "{:<30}     {:^15}     {:>25}\n" \
         .format(address[2], "", "")
     report += "{:<30}     {:^15}     {:>25}\n" \
-        .format("VAT: " + (subs[0][4] if subs[0][4] is not None else ""), "", "")
+        .format("VAT: " + (subs[0]['vat'] if subs[0]['vat'] is not None else ""), "", "")
     report += "\n\n"
 
-    cur.execute(
+    subs = run_query(conn,
         "SELECT \
             service.code,\
             service.description,\
@@ -250,9 +254,6 @@ def client_invoice(client, me):
         and ecn.subscription.service = ecn.service.code \
         and ecn.client.code = '" + client + "';")
 
-    subsHeader = cur.column_names
-    subs = cur.fetchall()
-
     hl = "+" + "-" * 78 + "+\n"
     report += hl
     report += "|{:^10}|{:^30}|{:^3}|{:^10}|{:^10}|{:^10}|\n".format("Code", "Service", "Qty", "Unit", "VAT", "Subtotal")
@@ -262,12 +263,12 @@ def client_invoice(client, me):
     total_vat = 0
     total_sales = 0
     for sub in subs:
-            total_exvat += float(sub[4]) * float(sub[3])
-            total_vat += float(sub[4]) * float(sub[3]) * 0.14
-            total_sales += float(sub[4]) * float(sub[3]) * 1.14
+            total_exvat += float(sub['qty']) * float(sub['sales_price'])
+            total_vat += float(sub['qty']) * float(sub['sales_price']) * 0.14
+            total_sales += float(sub['qty']) * float(sub['sales_price']) * 1.14
             cur.execute("INSERT INTO ecn.sales_invoice (number, date, client, service) VALUES ('0d49b1fd9f', '2017-6-30', 'gbg001', 'dsl4');")
             report += "|{:<10}|{:<30}|{:>3}|{:>10}|{:>10}|{:>10}|\n"\
-                .format(str(sub[0]), str(sub[1]), str(sub[4]), str(round(sub[3],2)), str(round(float(sub[3])*0.14, 2)), str(round(float(sub[4])*float(sub[3])*1.14,2)))
+                .format(str(sub['code']), str(sub['description']), str(sub['qty']), str(round(sub['sales_price'],2)), str(round(float(sub['sales_price'])*0.14, 2)), str(round(float(sub['qty'])*float(sub['sales_price'])*1.14,2)))
     report += hl
     report += "|{:<40}  {:>3}|{:>10}|{:>10}|{:>10}|\n"\
         .format("Totals", "", str(round(total_exvat,2)), str(round(total_vat,2)), str(round(total_sales,2)))
