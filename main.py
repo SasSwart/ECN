@@ -44,13 +44,10 @@ def run_query(connection, query_str):
 
 
 def default_report(title, result_set, **flags):
-    report = ['{}\n{:^30} {:^3} {:^10} {:^10} {:^30} \n'.format(title, 'Description', 'Qty', 'Cost', 'Sales', 'Client')]
-    hl = '-' * 89 + '\n'
-    report.append(hl)
+    hl = '-' * 89
+    report = [title, '{:^30} {:^3} {:^10} {:^10} {:^30}'.format('Description', 'Qty', 'Cost', 'Sales', 'Client'), hl]
 
-    flags = dict(**flags)
-    row_str = '|{:<30}|{:^3}|{:>10}|{:>10}|{:>30}|\n'
-
+    flags, row_str = dict(**flags), '|{:<30}|{:^3}|{:>10}|{:>10}|{:>30}|'
     total_cost, total_sales, total_qty = 0, 0, 0
     for entry in result_set:
         state = sum([entry[k] in flags[k].split(', ') for k in flags.keys()]) == len(flags) if flags else True
@@ -70,32 +67,29 @@ def default_report(title, result_set, **flags):
 
             report.append(row_str.format(entry['description'], entry['qty'], cost_price, sales_price, name))
     report.append(hl)
-    report.append(' {:<30} {:^3} {:>10} {:>10}\n'.format('Total', total_qty, total_cost, total_sales))
-    return ''.join(report)
+    report.append(' {:<30} {:^3} {:>10} {:>10}'.format('Total', total_qty, total_cost, total_sales))
+    return '\n'.join(report)
 
 conn = connect(username=u_name,
                password=p_word,
                hostname=h_name)
 
-q_str = \
-    "SELECT \
-        service.description,\
-        cost_price,\
-        sales_price,\
-        subscription.qty,\
-        first_name, \
-        last_name,\
-        company,\
-        client.code,\
-        subscription.service,\
-        service.supplier,\
-        service.type\
-    FROM ecn.client, ecn.subscription, ecn.service, ecn.service_type \
-    WHERE ecn.client.code = ecn.subscription.client \
-    AND ecn.service.type = ecn.service_type.type \
-    AND ecn.subscription.service = ecn.service.code;"
-
-results = run_query(conn, q_str)
+results = run_query(conn, "SELECT\n"
+                          "    service.description,\n"
+                          "    cost_price,\n"
+                          "    sales_price,\n"
+                          "    subscription.qty,\n"
+                          "    first_name,\n"
+                          "    last_name,\n"
+                          "    company,\n"
+                          "    entity.code,\n"
+                          "    subscription.service,\n"
+                          "    service.supplier,\n"
+                          "    service.type\n"
+                          "FROM ecn.entity, ecn.subscription, ecn.service, ecn.service_type\n"
+                          "WHERE ecn.entity.code = ecn.subscription.client\n"
+                          "AND ecn.service.type = ecn.service_type.type\n"
+                          "AND ecn.subscription.service = ecn.service.code;")
 
 
 def internet_solutions_domain():
@@ -142,60 +136,57 @@ cur = conn.cursor()
 
 def client_totals():
     subs = run_query(conn,
-                     "SELECT \
-                         service.description,\
-                         sum(cost_price*subscription.qty),\
-                         sum(sales_price*subscription.qty),\
-                         sum(subscription.qty),\
-                         first_name, \
-                         last_name,\
-                         company,\
-                         client.code,\
-                         subscription.service,\
-                         service.supplier,\
-                         service.type\
-                     FROM ecn.client, ecn.subscription, ecn.service, ecn.service_type \
-                     where ecn.client.code = ecn.subscription.client \
-                     and ecn.service.type = ecn.service_type.type \
-                     and ecn.subscription.service = ecn.service.code\
-                     group by client.code;")
+                     "SELECT\n"
+                     "    service.description,\n"
+                     "    sum(cost_price*subscription.qty) as total_cost,\n"
+                     "    sum(sales_price*subscription.qty) as total_sales,\n"
+                     "    sum(subscription.qty) as total_qty,\n"
+                     "    first_name,\n"
+                     "    last_name,\n"
+                     "    company,\n"
+                     "    client.code,\n"
+                     "    subscription.service,\n"
+                     "    service.supplier,\n"
+                     "    service.type\n"
+                     "FROM ecn.entity, ecn.subscription, ecn.service, ecn.service_type\n"
+                     "WHERE ecn.entity.code = ecn.subscription.client\n"
+                     "AND ecn.service.type = ecn.service_type.type\n"
+                     "AND ecn.subscription.service = ecn.service.code\n"
+                     "GROUP BY entity.code;")
 
-    report = "Client Totals\n"
-    report += " {:^30} {:^10} {:^10} \n".format("Client", "Cost", "Sales")
-    hl = "-" * 54 + "\n"
-    report += hl
+    hl = "-" * 54
+    report = ["Client Totals", " {:^30} {:^10} {:^10}".format("Client", "Cost", "Sales"), hl]
 
     total_cost, total_sales, total_qty = 0, 0, 0
     for sub in subs:
-            total_cost += replace_none(sub['sum(cost_price*subscription.qty)'], 0)
-            total_sales += replace_none(sub['sum(sales_price*subscription.qty)'], 0)
-            total_qty += replace_none(sub['sum(subscription.qty)'], 0)
+            total_cost += replace_none(sub['total_cost'], 0)
+            total_sales += replace_none(sub['total_sales'], 0)
+            total_qty += replace_none(sub['total_qty'], 0)
             if sub['company'] is None:
-                name = '{} {}'.format(replace_none(sub['first_name'], ''), replace_none(sub['last_name']))
+                name = '{} {}'.format(replace_none(sub['first_name'], ''), replace_none(sub['last_name'], ''))
             else:
                 name = sub['company']
-            report += "|{:<30}|{:>10}|{:>10}|\n".format(name,
-                                                        sub['sum(cost_price*subscription.qty)'],
-                                                        sub['sum(sales_price*subscription.qty)'])
-    report += hl
-    report += " {:<30} {:>10} {:>10}\n".format("Total", total_cost, total_sales)
-    print(report)
+            report.append("|{:<30}|{:>10}|{:>10}|".format(name,
+                                                          sub['total_cost'],
+                                                          sub['total_sales']))
+    report.append(hl)
+    report.append(" {:<30} {:>10} {:>10}".format("Total", total_cost, total_sales))
+    print('\n'.join(report))
 
 
 def client_invoice(client, me):
-    report = "\n\n\n"
-
+    report = ['\n\n']
     sub = run_query(conn,
-                    "SELECT \n"
-                    "   me.code,\n"
-                    "   first_name,\n"
-                    "   last_name,\n"
-                    "   company,\n"
-                    "   vat,\n"
-                    "   physical_address,\n"
-                    "   postal_address\n"
-                    "FROM ecn.me\n"
-                    "WHERE ecn.me.code = '" + me + "';"
+                    "SELECT\n"
+                    "    entity.code,\n"
+                    "    first_name,\n"
+                    "    last_name,\n"
+                    "    company,\n"
+                    "    vat,\n"
+                    "    physical_address,\n"
+                    "    postal_address\n"
+                    "FROM ecn.entity\n"
+                    "WHERE ecn.entity.code = '" + me + "';"
                     )[0]
 
     if sub['company'] is None:
@@ -205,26 +196,25 @@ def client_invoice(client, me):
     date = datetime.datetime.now()
     address = replace_none(sub['physical_address'], replace_none(sub['postal_address'], ''))
     address = (['', '', ''] if address == '' else address.split(', '))
-
     header_line = "{:<30}     {:^15}     {:>25}\n"
-    report += (header_line * 5 + "\n\n").format(
-        name, "", "",
-        address[0], "", "Code: " + sub['code'],
-        address[1], "", "",
-        address[2], "", "",
-                        "VAT: " + replace_none(sub['vat'], ''), "", "")
+    report.append((header_line * 5 + "\n\n").format(
+                   name, "", "",
+                   address[0], "", "Code: " + sub['code'],
+                   address[1], "", "",
+                   address[2], "", "",
+                   "VAT: " + replace_none(sub['vat'], ''), "", ""))
 
     sub = run_query(conn,
-                    "SELECT \n"
-                    "   client.code,\n"
-                    "   first_name,\n"
-                    "   last_name,\n"
-                    "   company,\n"
-                    "   vat,\n"
-                    "   physical_address,\n"
-                    "   postal_address\n"
-                    "FROM ecn.client\n"
-                    "where ecn.client.code = '" + client + "';"
+                    "SELECT\n"
+                    "    entity.code,\n"
+                    "    first_name,\n"
+                    "    last_name,\n"
+                    "    company,\n"
+                    "    vat,\n"
+                    "    physical_address,\n"
+                    "    postal_address\n"
+                    "FROM ecn.entity\n"
+                    "WHERE ecn.entity.code = '" + client + "';"
                     )[0]
     if sub['company'] is None:
         name = replace_none(sub['first_name'], '') + ' ' + replace_none(sub['last_name'], '')
@@ -234,114 +224,110 @@ def client_invoice(client, me):
     address = replace_none(sub['physical_address'], replace_none(sub['postal_address'], ''))
     address = ['', '', ''] if address == '' else address.split(', ')
 
-    report += (header_line * 5 + "\n\n").format(
-                name,       "", "",
-                address[0], "", "Code: " + sub['code'],
-                address[1], "", "",
-                address[2], "", "",
-                "VAT: " + replace_none(sub['vat'], ''), "", "")
-    report += "\n\n"
+    report.append((header_line * 5 + "\n\n").format(
+                  name,       "", "",
+                  address[0], "", "Code: " + sub['code'],
+                  address[1], "", "",
+                  address[2], "", "",
+                  "VAT: " + replace_none(sub['vat'], ''), "", ""))
+    report.append('\n')
 
     subs = run_query(conn,
-                     "SELECT \
-                         service.code,\
-                         service.description,\
-                         cost_price,\
-                         sales_price,\
-                         subscription.qty,\
-                         first_name, \
-                         last_name,\
-                         company,\
-                         client.code,\
-                         subscription.service,\
-                         service.supplier,\
-                         service.type\
-                    FROM ecn.client, ecn.subscription, ecn.service, ecn.service_type \
-                    where ecn.client.code = ecn.subscription.client \
-                    and ecn.service.type = ecn.service_type.type \
-                    and ecn.subscription.service = ecn.service.code \
-                    and ecn.client.code = '" + client + "';")
+                     "SELECT\n"
+                     "    service.code,\n"
+                     "    service.description,\n"
+                     "    cost_price,\n"
+                     "    sales_price,\n"
+                     "    subscription.qty,\n"
+                     "    first_name,\n"
+                     "    last_name,\n"
+                     "    company,\n"
+                     "    entity.code,\n"
+                     "    subscription.service,\n"
+                     "    service.supplier,\n"
+                     "    service.type\n"
+                     "FROM ecn.entity, ecn.subscription, ecn.service, ecn.service_type\n"
+                     "WHERE ecn.entity.code = ecn.subscription.client\n"
+                     "AND ecn.service.type = ecn.service_type.type\n"
+                     "AND ecn.subscription.service = ecn.service.code\n"
+                     "AND ecn.entity.code = '" + client + "';")
 
-    hl = "+" + "-" * 78 + "+\n"
-    report += hl
-    report += "|{:^10}|{:^30}|{:^3}|{:^10}|{:^10}|{:^10}|\n".format("Code", "Service", "Qty", "Unit", "VAT", "Subtotal")
-    report += hl
+    hl = "+" + "-" * 78 + '+'
+    report.append(hl)
+    report.append(
+        "|{:^10}|{:^30}|{:^3}|{:^10}|{:^10}|{:^10}|".format("Code", "Service", "Qty", "Unit", "VAT", "Subtotal"))
+    report.append(hl)
 
     total_exvat, total_vat, total_sales = 0, 0, 0
     for sub in subs:
             total_exvat += sub['qty'] * sub['sales_price']
             total_vat += sub['qty'] * sub['sales_price'] * 0.14
             total_sales += sub['qty'] * sub['sales_price'] * 1.14
-            cur.execute("INSERT INTO ecn.sales_invoice (number, date, client, service) VALUES ('0d49b1fd9f', '2017-6-30', 'gbg001', 'dsl4');")
-            report += "|{:<10}|{:<30}|{:>3}|{:>10}|{:>10}|{:>10}|\n"\
-                .format(sub['code'],
-                        sub['description'],
-                        sub['qty'],
-                        round(sub['sales_price'], 2),
-                        round(sub['sales_price'] * 0.14, 2),
-                        round(sub['qty'] * sub['sales_price'] * 1.14, 2))
-    report += hl
-    report += "|{:<40}  {:>3}|{:>10}|{:>10}|{:>10}|\n"\
-        .format("Totals", "", round(total_exvat, 2), round(total_vat, 2), round(total_sales, 2))
-    report += hl + "\n\n"
-
-    lines = report.split('\n')[2:-2]
-    report = '\n'.join(['{:^{}}'.format(line, page[0]) for line in lines]) + "\n" * (page[1] - len(lines) % page[1])
+            # cur.execute("INSERT INTO ecn.sales_invoice (number, date, client, service) VALUES ('0d49b1fd9f', '2017-6-30', 'gbg001', 'dsl4');")
+            report.append(
+                "|{:<10}|{:<30}|{:>3}|{:>10}|{:>10}|{:>10}|".format(sub['code'],
+                                                                    sub['description'],
+                                                                    sub['qty'],
+                                                                    round(sub['sales_price'], 2),
+                                                                    round(sub['sales_price'] * 0.14, 2),
+                                                                    round(sub['qty'] * sub['sales_price'] * 1.14, 2)))
+    report.append(hl)
+    report.append("|{:<40}  {:>3}|{:>10}|{:>10}|{:>10}|".format(
+        "Totals", "", round(total_exvat, 2), round(total_vat, 2), round(total_sales, 2)))
+    report.append(hl)
+    report = '\n'.join(['{:^{}}'.format(line, page[0]) for line in report]) + "\n" * (page[1] - len(report) % page[1])
     return report, total_sales
 
 
 def service_totals(supplier):
     subs = run_query(conn,
-                     "SELECT \
-                        service.description,\
-                        sum(cost_price*subscription.qty),\
-                        sum(sales_price*subscription.qty),\
-                        sum(subscription.qty),\
-                        first_name, \
-                        last_name,\
-                        company,\
-                        client.code,\
-                        subscription.service,\
-                        service.supplier,\
-                        service.type\
-                     FROM ecn.client, ecn.subscription, ecn.service, ecn.service_type \
-                     where ecn.client.code = ecn.subscription.client \
-                     and ecn.service.type = ecn.service_type.type \
-                     and ecn.subscription.service = ecn.service.code\
-                     group by subscription.service;")
+                     "SELECT\n"
+                     "   service.description,\n"
+                     "   sum(cost_price*subscription.qty) as total_cost,\n"
+                     "   sum(sales_price*subscription.qty) as total_sales,\n"
+                     "   sum(subscription.qty) as total_qty,\n"
+                     "   first_name,\n"
+                     "   last_name,\n"
+                     "   company,\n"
+                     "   entity.code,\n"
+                     "   subscription.service,\n"
+                     "   service.supplier,\n"
+                     "   service.type\n"
+                     "FROM ecn.entity, ecn.subscription, ecn.service, ecn.service_type\n"
+                     "WHERE ecn.entity.code = ecn.subscription.client\n"
+                     "AND ecn.service.type = ecn.service_type.type\n"
+                     "AND ecn.subscription.service = ecn.service.code\n"
+                     "GROUP BY subscription.service;")
 
-    report = "Service Totals by Supplier\n"
-    report += " {:^30} {:^3} {:^10} {:^10} \n".format("Client", "Qty", "Cost", "Sales")
-    hl = "-" * 58 + "\n"
-    report += hl
+    report = ["Service Totals by Supplier", " {:^30} {:^3} {:^10} {:^10} ".format("Client", "Qty", "Cost", "Sales")]
+    hl = "-" * 58
+    report.append(hl)
 
-    total_cost = 0
-    total_sales = 0
-    total_qty = 0
+    total_cost, total_sales, total_qty = 0, 0, 0
     for sub in subs:
         if sub['supplier'] == supplier:
-            total_cost += replace_none(sub['sum(sales_price*subscription.qty)'], 0)
-            total_sales += replace_none(sub['sum(sales_price*subscription.qty)'], 0)
-            total_qty += replace_none(sub['sum(subscription.qty)'], 0)
+            total_cost += replace_none(sub['total_cost'], 0)
+            total_sales += replace_none(sub['total_sales'], 0)
+            total_qty += replace_none(sub['total_qty'], 0)
             if sub['company'] is None:
                 name = '{} {}'.format(replace_none(sub['first_name'], ''), replace_none(sub['last_name'], ''))
             else:
                 name = sub['company']
-            report += "|{:<30}|{:^3}|{:>10}|{:>10}|\n".format(sub['description'],
-                                                              sub['sum(subscription.qty)'],
-                                                              sub['sum(sales_price*subscription.qty)'],
-                                                              sub['sum(sales_price*subscription.qty)'])
-    report += hl
-    report += " {:<30} {:^3} {:>10} {:>10}\n".format("Total", total_qty, total_cost, total_sales)
-    print(report)
+            report.append("|{:<30}|{:^3}|{:>10}|{:>10}|".format(sub['description'],
+                                                                sub['total_qty'],
+                                                                sub['total_cost'],
+                                                                sub['total_sales']))
+    report.append(hl)
+    report.append(" {:<30} {:^3} {:>10} {:>10}".format("Total", total_qty, total_cost, total_sales))
+    print('\n'.join(report))
 
 
 def monthly_accounts_per_client(PRINT_ZEROES=False):
     report = []
     subs = run_query(conn,
-                     "SELECT\
-                        client.code\
-                     FROM ecn.client;")
+                     "SELECT\n"
+                     "   entity.code\n"
+                     "FROM ecn.entity;")
     for sub in subs:
         invoice = client_invoice(sub['code'], "ecn001")
         if invoice[1] > 0 or PRINT_ZEROES:
@@ -349,6 +335,14 @@ def monthly_accounts_per_client(PRINT_ZEROES=False):
     return report
 
 # service_totals('axx001')
+
+# axxess()
+
+# internet_solution_adsl()
+
+# internet_solutions_domain()
+
+# internet_solutions_mobile()
 
 # invoices = monthly_accounts_per_client()
 # for invoice in invoices:
