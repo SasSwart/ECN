@@ -2,122 +2,122 @@ import mysql.connector
 import datetime
 import hashlib
 
-host = "192.168.0.33"
-user = "root"
-passw = "Hunt!ngSpr!ngbuck123"
+h_name = "192.168.0.33"
+u_name = "root"
+p_word = "Hunt!ngSpr!ngbuck123"
 
-page = (85,58)
-
-
-def connect(user, password, host):
-    # Connect to local Database
-        conn = mysql.connector.connect(
-            user=user,
-            password=password,
-            host=host,
-        )
-        cur = conn.cursor()
-        return conn, cur, None
+page = (85, 58)
 
 
-def md5(fname):
+def md5(f_name):
     hash_md5 = hashlib.md5()
-    hash_md5.update(fname)
+    hash_md5.update(f_name)
     return hash_md5.hexdigest()
-
-con, cur, error = connect(user, passw, host)
 
 
 def save_file():
     pass
 
 
-def parse_sub(sub):
-    fields = ('description', 'cost', 'sales', 'qty', 'f_name', 'l_name', 'company')
-    values = {k: (0 if v is None else v) for k, v in zip(fields, sub[:7])}
-
-    cost = values['cost'] * values['qty']
-    sales = values['sales'] * values['qty']
-
-    if values['company']:
-        name = values['company']
-    else:
-        f_name, l_name = values['f_name'], values['l_name']
-        name = (f_name if f_name else '') + (l_name if l_name else '')
-    return values['description'], cost, sales, values['qty'], name
+def connect(username, password, hostname):
+    return mysql.connector.connect(user=username,
+                                   password=password,
+                                   host=hostname)
 
 
-def default_report(title,
-                   subscription='',
-                   supplier=None,
-                   line_width=89):
-    cur.execute(
-        "SELECT \
-            service.description,\
-            cost_price,\
-            sales_price,\
-            subscription.qty,\
-            first_name, \
-            last_name,\
-            company,\
-            client.code,\
-            subscription.service,\
-            service.supplier,\
-            service.type\
-        FROM ecn.client, ecn.subscription, ecn.service, ecn.service_type \
-        where ecn.client.code = ecn.subscription.client \
-        and ecn.service.type = ecn.service_type.type \
-        and ecn.subscription.service = ecn.service.code;")
-    subsHeader = cur.column_names
-    subs = cur.fetchall()
+def run_query(connection, query_str):
+    cur = connection.cursor()
+    cur.execute(query_str)
+    c_names, q_result = cur.column_names, cur.fetchall()
+    result_set = [{k: q_result[i][j] for j, k in enumerate(c_names)} for i in range(len(q_result))]
+    return result_set
 
+
+def default_report(title, result_set, flags={}):
     report = ['{}\n{:^30} {:^3} {:^10} {:^10} {:^30} \n'.format(title, 'Description', 'Qty', 'Cost', 'Sales', 'Client')]
-    hl = '-' * line_width + '\n'
+    hl = '-' * 89 + '\n'
     report.append(hl)
 
     total_cost, total_sales, total_qty = 0, 0, 0
-    for sub in subs:
-        subscription_flag = True if subscription is '' else sub[-1] in subscription.split(', ')
-        supplier_flag = True if supplier is None else sub[-2] == supplier
+    row_str = '|{:<30}|{:^3}|{:>10}|{:>10}|{:>30}|\n'
+    for entry in result_set:
+        state = sum([entry[k] in flags[k].split(', ') for k in flags.keys()]) == len(flags) if flags else True
+        if state:
+            cost_price = entry['cost_price'] * entry['qty']
+            sales_price = entry['sales_price'] * entry['qty']
 
-        if subscription_flag and supplier_flag:
-            description, cost, sales, qty, name = parse_sub(sub)
+            f_name, l_name, company = entry['first_name'], entry['last_name'], entry['company']
+            if company is None:
+                name = '{} {}'.format('_' if f_name is None else f_name, '_' if l_name is None else l_name)
+            else:
+                name = company
 
-            total_cost += cost
-            total_sales += sales
-            total_qty += qty
+            total_cost += cost_price
+            total_sales += sales_price
+            total_qty += entry['qty']
 
-            report.append('|{:<30}|{:^3}|{:>10}|{:>10}|{:>30}|\n'.format(description, qty, cost, sales, name))
+            report.append(row_str.format(entry['description'], entry['qty'], cost_price, sales_price, name))
     report.append(hl)
-    report.append(' {:<30} {:^3} {:>10} {:>10}\n'.format('Total', str(total_qty), str(total_cost), str(total_sales)))
+    report.append(' {:<30} {:^3} {:>10} {:>10}\n'.format('Total', total_qty, total_cost, total_sales))
     return ''.join(report)
+
+conn = connect(username=u_name,
+               password=p_word,
+               hostname=h_name)
+
+q_str = \
+    "SELECT \
+        service.description,\
+        cost_price,\
+        sales_price,\
+        subscription.qty,\
+        first_name, \
+        last_name,\
+        company,\
+        client.code,\
+        subscription.service,\
+        service.supplier,\
+        service.type\
+    FROM ecn.client, ecn.subscription, ecn.service, ecn.service_type \
+    WHERE ecn.client.code = ecn.subscription.client \
+    AND ecn.service.type = ecn.service_type.type \
+    AND ecn.subscription.service = ecn.service.code;"
+
+results = run_query(conn, q_str)
 
 
 def internet_solutions_domain():
     print(default_report(title='IS Domain Reconciliation',
-                         subscription='domain',
-                         supplier='is0001'))
+                         result_set=results,
+                         flags={'type': 'domain',
+                                'supplier': 'is0001'}))
 
 
 def internet_solutions_mobile():
     print(default_report(title='IS Mobile Reconciliation',
-                         subscription='mobile',
-                         supplier='is0001'))
+                         result_set=results,
+                         flags={'type': 'mobile',
+                                'supplier': 'is0001'}))
 
 
 def internet_solution_adsl():
     print(default_report(title='IS Per Account Reconciliation',
-                         subscription='peracc, uncapped',
-                         supplier='is0001'))
+                         result_set=results,
+                         flags={'type': 'peracc, uncapped',
+                                'supplier': 'is0001'}))
 
     print(default_report(title='IS Per GB Reconciliation',
-                         subscription='pergb',
-                         supplier='is0001'))
+                         result_set=results,
+                         flags={'type': 'pergb',
+                                'supplier': 'is0001'}))
 
 
 def axxess():
     print(default_report(title='Axxess Reconciliation',
-                         supplier='axx001'))
+                         result_set=results,
+                         flags={'supplier': 'axx001'}))
+
+cur = conn.cursor()
 
 
 def client_totals():
@@ -177,7 +177,7 @@ def client_invoice(client, me):
                 "   physical_address,\n"
                 "   postal_address\n"
                 "FROM ecn.me\n"
-                "where ecn.me.code = '"+me+"';")
+                "where ecn.me.code = '" + me + "';")
     subs = cur.fetchall()
     if subs[0][3] is None:
         name = (subs[0][1] if subs[0][1] is not None else "") + " " + (subs[0][2] if subs[0][2] is not None else "")
@@ -255,7 +255,7 @@ def client_invoice(client, me):
 
     hl = "+" + "-" * 78 + "+\n"
     report += hl
-    report += "|{:^10}|{:^30}|{:^3}|{:^10}|{:^10}|{:^10}|\n".format("Code", "Service","Qty", "Unit", "VAT", "Subtotal")
+    report += "|{:^10}|{:^30}|{:^3}|{:^10}|{:^10}|{:^10}|\n".format("Code", "Service", "Qty", "Unit", "VAT", "Subtotal")
     report += hl
 
     total_exvat = 0
@@ -264,7 +264,7 @@ def client_invoice(client, me):
     for sub in subs:
             total_exvat += float(sub[4]) * float(sub[3])
             total_vat += float(sub[4]) * float(sub[3]) * 0.14
-            total_sales += float(sub[4])*float(sub[3])*1.14
+            total_sales += float(sub[4]) * float(sub[3]) * 1.14
             cur.execute("INSERT INTO ecn.sales_invoice (number, date, client, service) VALUES ('0d49b1fd9f', '2017-6-30', 'gbg001', 'dsl4');")
             report += "|{:<10}|{:<30}|{:>3}|{:>10}|{:>10}|{:>10}|\n"\
                 .format(str(sub[0]), str(sub[1]), str(sub[4]), str(round(sub[3],2)), str(round(float(sub[3])*0.14, 2)), str(round(float(sub[4])*float(sub[3])*1.14,2)))
