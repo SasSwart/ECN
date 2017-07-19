@@ -7,6 +7,8 @@ h_name = "192.168.0.33"
 u_name = "root"
 p_word = "Hunt!ngSpr!ngbuck123"
 
+db_name = 'ecn'
+
 page = (85, 58)
 
 
