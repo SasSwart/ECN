@@ -61,7 +61,7 @@ conn = connect(username=u_name,
                hostname=h_name)
 
 
-def journal_entry(date, *ledgers, total=None):
+def journal_entry(date, journal_description, *ledgers, total=None):
     check, balance = 0, 0
     for value, description, account in ledgers:
         if value > 0:
@@ -70,13 +70,13 @@ def journal_entry(date, *ledgers, total=None):
     is_balanced = (balance == 0) if total is None else (check == total and balance == 0)
 
     if is_balanced:
-        enter_journal = "INSERT INTO {}.journal (date, value) VALUES ('{}', '{}');".format(db_name, date, check)
+        enter_journal = "INSERT INTO {}.journal (date, description, value) VALUES ('{}', '{}', '{}');".format(db_name, date, journal_description, check)
         journal = run_query(conn, enter_journal, last_id=True)
         for value, description, account in ledgers:
             enter_ledger = ("INSERT INTO {}.account_line_item"
                             "(journal, value, description, account) VALUES ('{}', '{}', '{}', '{}');".format(db_name, journal, value, description, account))
-            run_query(conn, enter_ledger)
-    return is_balanced
+            run_query(conn, enter_ledger, last_id=True)
+    return journal
 
 def ledger(value, description, account):
     return (value, description, account)
@@ -211,8 +211,17 @@ def client_totals():
     report.append(" {:<30} {:>10} {:>10}".format("Total", total_cost, total_sales))
     print('\n'.join(report))
 
+invoice_nr = run_query(conn, 'SELECT code FROM {}.tax_invoice ORDER BY code DESC LIMIT 1;'.format(db_name))
+if len(invoice_nr) == 0:
+    invoice_nr = 0
+else:
+    invoice_nr = invoice_nr[0]['id']
+
 
 def client_invoice(client, me):
+    global invoice_nr
+
+    invoice_nr += 1
     report = ['\n\n']
 
     #<editor-fold desc="HEADER: Supplier Letterhead">
@@ -340,7 +349,19 @@ def client_invoice(client, me):
                         round(sub['sales_price'] * 0.14, 2),
                         round(sub['qty'] * sub['sales_price'] * 1.14, 2)))
     if len(ledgers) > 0:
-        if journal_entry(date, *ledgers):
+        journal = journal_entry(date, 'Tax Invoice Nr.{}'.format(invoice_nr), *ledgers)
+        if journal is not None:
+            run_query(conn,
+                      "INSERT INTO {}.tax_invoice "
+                      "(code, reseller, client, journal) "
+                      "VALUES "
+                      "('{}', '{}', '{}', '{}');".format(
+                          db_name,
+                          invoice_nr,
+                          me,
+                          client,
+                          journal
+                      ))
             conn.commit()
         else:
             conn.rollback()
