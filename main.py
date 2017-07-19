@@ -2,12 +2,14 @@
 from mysql import connector
 import datetime
 import hashlib
+import decimal
 
 h_name = "192.168.0.33"
 u_name = "root"
 p_word = "Hunt!ngSpr!ngbuck123"
-
 db_name = 'ecn'
+
+vat_rate = 0.14
 
 page = (85, 58)
 
@@ -34,6 +36,8 @@ def connect(username, password, hostname):
 
 def run_query(connection, query_str, last_id=False):
     def normalise_type(x):
+        if isinstance(x, decimal.Decimal):
+            return float(x)
         return x
 
     cursor = connection.cursor()
@@ -47,15 +51,19 @@ def run_query(connection, query_str, last_id=False):
     result_set = [{k: normalise_type(q_row[j]) for j, k in enumerate(c_names)} for q_row in q_result]
     return result_set
 
+def select(attribute, table, key_name, key_value):
+    query = 'SELECT {} from {}.{}'.format(attribute, db_name, table)
+    query += ' WHERE {} = "{}";'.format(key_name, key_value)
+    return run_query(conn, query)
 
 conn = connect(username=u_name,
                password=p_word,
                hostname=h_name)
 
 
-def journal_entry(date, total=None, *ledgers):
+def journal_entry(date, *ledgers, total=None):
     check, balance = 0, 0
-    for value, account in ledgers:
+    for value, description, account in ledgers:
         if value > 0:
             check += value
         balance += value
@@ -64,12 +72,14 @@ def journal_entry(date, total=None, *ledgers):
     if is_balanced:
         enter_journal = "INSERT INTO {}.journal (date, value) VALUES ('{}', '{}');".format(db_name, date, check)
         journal = run_query(conn, enter_journal, last_id=True)
-        for value, account in ledgers:
+        for value, description, account in ledgers:
             enter_ledger = ("INSERT INTO {}.account_line_item"
-                            "(journal, value, account) VALUES ('{}', '{}', '{}');".format(db_name, journal, value, account))
+                            "(journal, value, description, account) VALUES ('{}', '{}', '{}', '{}');".format(db_name, journal, value, description, account))
             run_query(conn, enter_ledger)
     return is_balanced
 
+def ledger(value, description, account):
+    return (value, description, account)
 
 def default_report(title, result_set, **flags):
     hl = '-' * 89
@@ -204,6 +214,8 @@ def client_totals():
 
 def client_invoice(client, me):
     report = ['\n\n']
+
+    #<editor-fold desc="HEADER: Supplier Letterhead">
     sub = run_query(conn,
                     "SELECT\n"
                     "    entity.code,\n"
@@ -231,7 +243,8 @@ def client_invoice(client, me):
                    address[1], "", "",
                    address[2], "", "",
                    "VAT: " + replace_none(sub['vat'], ''), "", ""))
-
+    #</editor-fold>
+    #<editor-fold desc="HEADER: Salutation">
     sub = run_query(conn,
                     "SELECT\n"
                     "    entity.code,\n"
@@ -259,7 +272,8 @@ def client_invoice(client, me):
                   address[2], "", "",
                   "VAT: " + replace_none(sub['vat'], ''), "", ""))
     report.append('\n')
-
+    #</editor-fold>
+    #<editor-fold desc="BODY  : Invoice Line Items">
     subs = run_query(conn,
                      "SELECT\n"
                      "    service.code,\n"
@@ -287,22 +301,56 @@ def client_invoice(client, me):
     report.append(hl)
 
     total_exvat, total_vat, total_sales = 0, 0, 0
+    ledgers = []
     for sub in subs:
-            total_exvat += sub['qty'] * sub['sales_price']
-            total_vat += sub['qty'] * sub['sales_price'] * 0.14
-            total_sales += sub['qty'] * sub['sales_price'] * 1.14
-            # cur.execute("INSERT INTO ecn.sales_invoice (number, date, client, service) VALUES ('0d49b1fd9f', '2017-6-30', 'gbg001', 'dsl4');")
-            report.append(
-                "|{:<10}|{:<30}|{:>3}|{:>10}|{:>10}|{:>10}|".format(sub['code'],
-                                                                    sub['description'],
-                                                                    sub['qty'],
-                                                                    round(sub['sales_price'], 2),
-                                                                    round(sub['sales_price'] * 0.14, 2),
-                                                                    round(sub['qty'] * sub['sales_price'] * 1.14, 2)))
+        client_accounts = select('id, name', 'account', 'owner', client)
+        reseller_accounts = select('id, name', 'account', 'owner', me)
+        ledgers.append(
+            ledger(sub['sales_price'],
+            sub['description'],
+            [x['id'] for x in client_accounts if
+             x['name'] == 'Supplier Control'][0]))
+        ledgers.append(
+            ledger(-sub['sales_price'],
+            sub['description'],
+            [x['id'] for x in reseller_accounts if
+             x['name'] == 'Customer Control'][0]
+        ))
+        ledgers.append(
+            ledger(sub['sales_price']*vat_rate,
+            sub['description'],
+            [x['id'] for x in client_accounts if
+             x['name'] == 'VAT Control'][0]
+            ))
+        ledgers.append(
+            ledger(-sub['sales_price']*vat_rate,
+            sub['description'],
+            [x['id'] for x in reseller_accounts if
+             x['name'] == 'VAT Control'][0]
+        ))
+        total_exvat += sub['qty'] * sub['sales_price']
+        total_vat += sub['qty'] * sub['sales_price'] * 0.14
+        total_sales += sub['qty'] * sub['sales_price'] * 1.14
+        report.append(
+            "|{:<10}|{:<30}|{:>3}|{:>10}|{:>10}|{:>10}|"
+            .format(sub['code'],
+                        sub['description'],
+                        sub['qty'],
+                        round(sub['sales_price'], 2),
+                        round(sub['sales_price'] * 0.14, 2),
+                        round(sub['qty'] * sub['sales_price'] * 1.14, 2)))
+    if len(ledgers) > 0:
+        if journal_entry(date, *ledgers):
+            conn.commit()
+        else:
+            conn.rollback()
     report.append(hl)
     report.append("|{:<40}  {:>3}|{:>10}|{:>10}|{:>10}|".format(
         "Totals", "", round(total_exvat, 2), round(total_vat, 2), round(total_sales, 2)))
     report.append(hl)
+    #</editor-fold>
+
+    # Center the report on the page
     report = '\n'.join(['{:^{}}'.format(line, page[0]) for line in report]) + "\n" * (page[1] - len(report) % page[1])
     return report, total_sales
 
@@ -372,6 +420,15 @@ def monthly_accounts_per_client(PRINT_ZEROES=False):
 
 # internet_solutions_mobile()
 
-# invoices = monthly_accounts_per_client()
-# for invoice in invoices:
-#     print(invoice)
+invoices = monthly_accounts_per_client()
+#for invoice in invoices:
+#    print(invoice)
+
+"""
+if journal_entry('2017-07-18', 114,
+              ledger(100, 352),
+              ledger(14, 292),
+              ledger(-114, 206)
+              ):
+    conn.commit()
+# """
