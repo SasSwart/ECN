@@ -1,6 +1,5 @@
 
 from mysql import connector
-from decimal import Decimal
 import datetime
 import hashlib
 
@@ -31,18 +30,43 @@ def connect(username, password, hostname):
                              host=hostname)
 
 
-def run_query(connection, query_str):
-    def normalize(x):
-        if isinstance(x, Decimal):
-            return float(x)
+def run_query(connection, query_str, last_id=False):
+    def normalise_type(x):
         return x
+
     cursor = connection.cursor()
     cursor.execute(query_str)
+
     if cursor.description is None:
+        if last_id:
+            return cursor.getlastrowid()
         return None
     c_names, q_result = cursor.column_names, cursor.fetchall()
-    result_set = [{k: normalize(q_row[j]) for j, k in enumerate(c_names)} for q_row in q_result]
+    result_set = [{k: normalise_type(q_row[j]) for j, k in enumerate(c_names)} for q_row in q_result]
     return result_set
+
+
+conn = connect(username=u_name,
+               password=p_word,
+               hostname=h_name)
+
+
+def journal_entry(date, total=None, *ledgers):
+    check, balance = 0, 0
+    for value, account in ledgers:
+        if value > 0:
+            check += value
+        balance += value
+    is_balanced = (balance == 0) if total is None else (check == total and balance == 0)
+
+    if is_balanced:
+        enter_journal = "INSERT INTO {}.journal (date, value) VALUES ('{}', '{}');".format(db_name, date, check)
+        journal = run_query(conn, enter_journal, last_id=True)
+        for value, account in ledgers:
+            enter_ledger = ("INSERT INTO {}.account_line_item"
+                            "(journal, value, account) VALUES ('{}', '{}', '{}');".format(db_name, journal, value, account))
+            run_query(conn, enter_ledger)
+    return is_balanced
 
 
 def default_report(title, result_set, **flags):
