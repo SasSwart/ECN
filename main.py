@@ -38,6 +38,8 @@ def run_query(connection, query_str):
         return x
     cursor = connection.cursor()
     cursor.execute(query_str)
+    if cursor.description is None:
+        return None
     c_names, q_result = cursor.column_names, cursor.fetchall()
     result_set = [{k: normalize(q_row[j]) for j, k in enumerate(c_names)} for q_row in q_result]
     return result_set
