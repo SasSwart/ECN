@@ -1,0 +1,36 @@
+﻿I want clients to receive Invoices consistently and punctually
+
+	I need to create and generate invoices consistently and punctually
+
+	I need to store invoices permanently
+
+	I need to retreive invoices quickly and easily
+
+	I need to render and display proffesional invoices physically or digitally
+
+	I need to send invoices automatically and as soon as required
+I want to track client payments
+
+	I need to easily enter payment details
+
+	I need to store client payments permanently
+
+I want clients to receive statements of their accounts consistently and accurately
+
+	I need to generate professional client statements at will
+
+	I need to determine which invoices should accompany statements
+
+	I need to save/send statements and relevant invoices per individual client
+
+I want to collect debit orders accurately and timeously
+	
+	I need to track client subscriptions accurately
+	
+	I need to manage client subscriptions efficiently
+
+	I need to generate a simple debit order report for bank authorisation (Lynn)
+
+I want to ensure that all my costs of sales and services are sold, rendered or used correctly
+
+	I need to generate reconciliation reports for all recurring supplier invoices

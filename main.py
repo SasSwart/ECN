@@ -1,4 +1,3 @@
-
 from mysql import connector
 import datetime
 import hashlib
@@ -51,10 +50,12 @@ def run_query(connection, query_str, last_id=False):
     result_set = [{k: normalise_type(q_row[j]) for j, k in enumerate(c_names)} for q_row in q_result]
     return result_set
 
+
 def select(attribute, table, key_name, key_value):
     query = 'SELECT {} from {}.{}'.format(attribute, db_name, table)
     query += ' WHERE {} = "{}";'.format(key_name, key_value)
     return run_query(conn, query)
+
 
 conn = connect(username=u_name,
                password=p_word,
@@ -70,16 +71,25 @@ def journal_entry(date, journal_description, *ledgers, total=None):
     is_balanced = (balance == 0) if total is None else (check == total and balance == 0)
 
     if is_balanced:
-        enter_journal = "INSERT INTO {}.journal (date, description, value) VALUES ('{}', '{}', '{}');".format(db_name, date, journal_description, check)
+        enter_journal = "INSERT INTO {}.journal (date, description, value) VALUES ('{}', '{}', '{}');".format(db_name,
+                                                                                                              date,
+                                                                                                              journal_description,
+                                                                                                              check)
         journal = run_query(conn, enter_journal, last_id=True)
         for value, description, account in ledgers:
             enter_ledger = ("INSERT INTO {}.account_line_item"
-                            "(journal, value, description, account) VALUES ('{}', '{}', '{}', '{}');".format(db_name, journal, value, description, account))
+                            "(journal, value, description, account) VALUES ('{}', '{}', '{}', '{}');".format(db_name,
+                                                                                                             journal,
+                                                                                                             value,
+                                                                                                             description,
+                                                                                                             account))
             run_query(conn, enter_ledger, last_id=True)
     return journal
 
+
 def ledger(value, description, account):
     return (value, description, account)
+
 
 def default_report(title, result_set, **flags):
     hl = '-' * 89
@@ -107,6 +117,7 @@ def default_report(title, result_set, **flags):
     report.append(hl)
     report.append(' {:<30} {:^3} {:>10} {:>10}'.format('Total', total_qty, total_cost, total_sales))
     return '\n'.join(report)
+
 
 conn = connect(username=u_name,
                password=p_word,
@@ -161,6 +172,7 @@ def axxess():
                          result_set=results,
                          supplier='axx001'))
 
+
 # axxess()
 
 # internet_solution_adsl()
@@ -197,19 +209,20 @@ def client_totals():
 
     total_cost, total_sales, total_qty = 0, 0, 0
     for sub in subs:
-            total_cost += replace_none(sub['total_cost'], 0)
-            total_sales += replace_none(sub['total_sales'], 0)
-            total_qty += replace_none(sub['total_qty'], 0)
-            if sub['company'] is None:
-                name = '{} {}'.format(replace_none(sub['first_name'], ''), replace_none(sub['last_name'], ''))
-            else:
-                name = sub['company']
-            report.append("|{:<30}|{:>10}|{:>10}|".format(name,
-                                                          sub['total_cost'],
-                                                          sub['total_sales']))
+        total_cost += replace_none(sub['total_cost'], 0)
+        total_sales += replace_none(sub['total_sales'], 0)
+        total_qty += replace_none(sub['total_qty'], 0)
+        if sub['company'] is None:
+            name = '{} {}'.format(replace_none(sub['first_name'], ''), replace_none(sub['last_name'], ''))
+        else:
+            name = sub['company']
+        report.append("|{:<30}|{:>10}|{:>10}|".format(name,
+                                                      sub['total_cost'],
+                                                      sub['total_sales']))
     report.append(hl)
     report.append(" {:<30} {:>10} {:>10}".format("Total", total_cost, total_sales))
     print('\n'.join(report))
+
 
 invoice_nr = run_query(conn, 'SELECT code FROM {}.tax_invoice ORDER BY code DESC LIMIT 1;'.format(db_name))
 if len(invoice_nr) == 0:
@@ -224,7 +237,7 @@ def client_invoice(client, me):
     invoice_nr += 1
     report = ['\n\n']
 
-    #<editor-fold desc="HEADER: Supplier Letterhead">
+    # <editor-fold desc="HEADER: Supplier Letterhead">
     sub = run_query(conn,
                     "SELECT\n"
                     "    entity.code,\n"
@@ -247,13 +260,13 @@ def client_invoice(client, me):
     address = (['', '', ''] if address == '' else address.split(', '))
     header_line = "{:<30}     {:^15}     {:>25}\n"
     report.append((header_line * 5 + "\n\n").format(
-                   name, "", "",
-                   address[0], "", "Code: " + sub['code'],
-                   address[1], "", "",
-                   address[2], "", "",
-                   "VAT: " + replace_none(sub['vat'], ''), "", ""))
-    #</editor-fold>
-    #<editor-fold desc="HEADER: Salutation">
+        name, "", "",
+        address[0], "", "Code: " + sub['code'],
+        address[1], "", "",
+        address[2], "", "",
+                        "VAT: " + replace_none(sub['vat'], ''), "", ""))
+    # </editor-fold>
+    # <editor-fold desc="HEADER: Salutation">
     sub = run_query(conn,
                     "SELECT\n"
                     "    entity.code,\n"
@@ -275,14 +288,14 @@ def client_invoice(client, me):
     address = ['', '', ''] if address == '' else address.split(', ')
 
     report.append((header_line * 5 + "\n\n").format(
-                  name,       "", "",
-                  address[0], "", "Code: " + sub['code'],
-                  address[1], "", "",
-                  address[2], "", "",
-                  "VAT: " + replace_none(sub['vat'], ''), "", ""))
+        name, "", "",
+        address[0], "", "Code: " + sub['code'],
+        address[1], "", "",
+        address[2], "", "",
+                        "VAT: " + replace_none(sub['vat'], ''), "", ""))
     report.append('\n')
-    #</editor-fold>
-    #<editor-fold desc="BODY  : Invoice Line Items">
+    # </editor-fold>
+    # <editor-fold desc="BODY  : Invoice Line Items">
     subs = run_query(conn,
                      "SELECT\n"
                      "    service.code,\n"
@@ -316,33 +329,33 @@ def client_invoice(client, me):
         reseller_accounts = select('id, name', 'account', 'owner', me)
         ledgers.append(
             ledger(sub['sales_price'],
-            sub['description'],
-            [x['id'] for x in client_accounts if
-             x['name'] == 'Supplier Control'][0]))
+                   sub['description'],
+                   [x['id'] for x in client_accounts if
+                    x['name'] == 'Supplier Control'][0]))
         ledgers.append(
             ledger(-sub['sales_price'],
-            sub['description'],
-            [x['id'] for x in reseller_accounts if
-             x['name'] == 'Customer Control'][0]
-        ))
+                   sub['description'],
+                   [x['id'] for x in reseller_accounts if
+                    x['name'] == 'Customer Control'][0]
+                   ))
         ledgers.append(
-            ledger(sub['sales_price']*vat_rate,
-            sub['description'],
-            [x['id'] for x in client_accounts if
-             x['name'] == 'VAT Control'][0]
-            ))
+            ledger(sub['sales_price'] * vat_rate,
+                   sub['description'],
+                   [x['id'] for x in client_accounts if
+                    x['name'] == 'VAT Control'][0]
+                   ))
         ledgers.append(
-            ledger(-sub['sales_price']*vat_rate,
-            sub['description'],
-            [x['id'] for x in reseller_accounts if
-             x['name'] == 'VAT Control'][0]
-        ))
+            ledger(-sub['sales_price'] * vat_rate,
+                   sub['description'],
+                   [x['id'] for x in reseller_accounts if
+                    x['name'] == 'VAT Control'][0]
+                   ))
         total_exvat += sub['qty'] * sub['sales_price']
         total_vat += sub['qty'] * sub['sales_price'] * 0.14
         total_sales += sub['qty'] * sub['sales_price'] * 1.14
         report.append(
             "|{:<10}|{:<30}|{:>3}|{:>10}|{:>10}|{:>10}|"
-            .format(sub['code'],
+                .format(sub['code'],
                         sub['description'],
                         sub['qty'],
                         round(sub['sales_price'], 2),
@@ -369,7 +382,7 @@ def client_invoice(client, me):
     report.append("|{:<40}  {:>3}|{:>10}|{:>10}|{:>10}|".format(
         "Totals", "", round(total_exvat, 2), round(total_vat, 2), round(total_sales, 2)))
     report.append(hl)
-    #</editor-fold>
+    # </editor-fold>
 
     # Center the report on the page
     report = '\n'.join(['{:^{}}'.format(line, page[0]) for line in report]) + "\n" * (page[1] - len(report) % page[1])
@@ -431,6 +444,7 @@ def monthly_accounts_per_client(PRINT_ZEROES=False):
             report.append(invoice[0])
     return report
 
+
 # service_totals('axx001')
 
 # axxess()
@@ -441,15 +455,6 @@ def monthly_accounts_per_client(PRINT_ZEROES=False):
 
 # internet_solutions_mobile()
 
-invoices = monthly_accounts_per_client()
-#for invoice in invoices:
+# invoices = monthly_accounts_per_client()
+# for invoice in invoices:
 #    print(invoice)
-
-"""
-if journal_entry('2017-07-18', 114,
-              ledger(100, 352),
-              ledger(14, 292),
-              ledger(-114, 206)
-              ):
-    conn.commit()
-# """
