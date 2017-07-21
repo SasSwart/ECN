@@ -74,7 +74,7 @@ class _ConditionalStatement(object):
     def x(self, format_by=None):
         if format_by is None:
             return ' '.join(map(str, self.expr))
-        replace, reform = format_by
+        reform, replace = format_by
         return _multi_reformat(_multi_replace(' '.join(map(str, self.expr)), replace), BACKEND_FORMAT, reform)
 
     def is_atom(self):
@@ -131,4 +131,14 @@ class _ConditionalStatement(object):
 
 
 z = o(a=(1, 2, 3), c=2, d=4)
-print(z.x(format_by=(PYE_REPLACEMENTS, PYE_FORMATTER)))
+
+
+def test(**kwargs):
+    def check():
+        return eval(z.x(AS_PYE), kwargs)
+    return check
+
+if __name__ == '__main__':
+    print(z.x())
+    a = test(a=4, c=2, d=4)
+    print(a())

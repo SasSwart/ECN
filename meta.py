@@ -1,5 +1,6 @@
 
 import datetime
+import hashlib
 
 from connection import Connection, o, AS_PYE
 from defaults import U_NAME, P_WORD, H_NAME, DB_NAME, PAGE, VAT_RATE, normalise_alias, replace_none
@@ -11,21 +12,40 @@ CONN = Connection(username=U_NAME,
                   db_name=DB_NAME)
 
 
+def journal_nr():
+    hash_md5 = hashlib.md5()
+    hash_md5.update(datetime.datetime.now())
+    return hash_md5.hexdigest()[:10]
+
+
 def journal_entry(date, journal_description, *ledgers, total=None):
-    check, balance = 0, 0
-    for value, description, account in ledgers:
-        if value > 0:
-            check += value
-        balance += value
-    is_balanced = (balance == 0) if total is None else (check == total and balance == 0)
+    journal, pair = journal_nr(), [0, 0]
+
+    def pack(accumulator, a, b, c, d):
+        x, y = accumulator
+        accumulator[:2] = x + (b if b > 0 else 0), y + b
+        return a, b, c, d
+
+    ledgers = [pack(pair, journal, value, description, account) for value, description, account in ledgers]
+
+    check, balance = pair
+    is_balanced = balance == 0 if total is None else (check == total and balance == 0)
 
     if is_balanced:
-        enter_journal = 'INSERT INTO {}.journal (date, description, value)'.format(DB_NAME)
-        CONN.query(enter_journal, (date, journal_description, check))
+        enter_journal = 'INSERT INTO {}.journal (id, date, description, value)'.format(DB_NAME)
+        CONN.query(enter_journal, (journal, date, journal_description, check))
 
         enter_ledger = 'INSERT INTO {}.account_line_item (journal, value, description, account)'.format(DB_NAME)
-        CONN.query(enter_ledger, ledgers, (0, -1))
-    return is_balanced
+        CONN.query(enter_ledger, ledgers)
+    return journal
+
+
+def request_invoice(invoice_nr):
+    return CONN.select('code')
+
+
+def create_invoice(client, me):
+    pass
 
 
 def ledger(value, description, account):

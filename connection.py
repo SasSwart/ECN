@@ -64,9 +64,8 @@ class ResultSet(object):
             yield {name: row[index] for name, index in self.keymap.items()}
 
     def filter(self, where, order=None):
-        # magic!
         def check(**kwargs):
-            return eval(where)
+            return eval(where, kwargs)
         filtered = [row for row in self.rows() if check(**row)]
         if order is None:
             return filtered if len(filtered) > 1 else filtered[0]
@@ -104,16 +103,11 @@ class Connection(object):
         self.to_execute.clear()
 
     def update(self):
-        row_ids = []
-        for stmt, values, dependent in self.to_execute:
-            if dependent is not None:
-                index, when = dependent
-                values = [v.insert(index, row_ids[when]) for v in values]
-            row_ids.append(self.rep_query(stmt, values))
+        row_ids = [self.rep_query(stmt, values) for stmt, values, dependent in self.to_execute]
         self.clear()
         return row_ids
 
-    def query(self, stmt, values=None, dependent=None):
+    def query(self, stmt, values=None):
         def type_norm(x):
             if isinstance(x, decimal.Decimal):
                 return float(x)
@@ -122,7 +116,7 @@ class Connection(object):
         if values is None:
             self.cursor.execute(stmt)
             return ResultSet(self, self.cursor.column_names, self.cursor.fetchall(), type_norm)
-        self.to_execute.append((stmt, values, dependent))
+        self.to_execute.append((stmt, values))
         return None
 
     def rep_query(self, stmt, values):
