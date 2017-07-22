@@ -2,8 +2,9 @@
 import datetime
 import hashlib
 
-from connection import Connection, o, AS_PYE
-from defaults import U_NAME, P_WORD, H_NAME, DB_NAME, PAGE, VAT_RATE, normalise_alias, replace_none
+from connection import Connection
+from node import o, AS_PYE
+from defaults import U_NAME, P_WORD, H_NAME, DB_NAME, PAGE, VAT_RATE, normalise_alias, replace_value
 
 
 CONN = Connection(username=U_NAME,
@@ -14,7 +15,7 @@ CONN = Connection(username=U_NAME,
 
 def journal_nr():
     hash_md5 = hashlib.md5()
-    hash_md5.update(datetime.datetime.now())
+    hash_md5.update(str(datetime.datetime.now()).encode('utf-8'))
     return hash_md5.hexdigest()[:10]
 
 
@@ -75,14 +76,15 @@ def client_invoice(client, me):
     date = datetime.datetime.now()
 
     name = normalise_alias(row['first_name'], row['last_name'], row['company'])
-    address = replace_none(row['physical_address'], replace_none(row['postal_address'], ''))
+    address = replace_value(row['physical_address'], replace_value(row['postal_address'], ''))
+
     street, town, zip_code = address.split(', ') if address else ('', '', '')
 
     report.append((header_line * 5 + "\n\n").format(name, "", "",
                                                     street, "", 'Code: {}'.format(row['code']),
                                                     town, "", "",
                                                     zip_code, "", "",
-                                                    "VAT: " + replace_none(row['vat'], ''), '', ''))
+                                                    "VAT: " + replace_value(row['vat'], ''), '', ''))
     #</editor-fold>
     # <editor-fold desc="HEADER: Salutation">
     row = CONN.query("SELECT\n"
@@ -97,14 +99,14 @@ def client_invoice(client, me):
                      "WHERE ecn.entity.code = '{}';".format(client)).row(0)
 
     name = normalise_alias(row['first_name'], row['last_name'], row['company'])
-    address = replace_none(row['physical_address'], replace_none(row['postal_address'], ''))
+    address = replace_value(row['physical_address'], replace_value(row['postal_address'], ''))
     street, town, zip_code = address.split(', ') if address else ('', '', '')
 
     report.append((header_line * 5 + "\n\n").format(name, "", "",
                                                     street, "", 'Code: {}'.format(row['code']),
                                                     town, "", "",
                                                     zip_code, "", "",
-                                                    "VAT: " + replace_none(row['vat'], ''), '', ''))
+                                                    "VAT: " + replace_value(row['vat'], ''), '', ''))
     report.append('\n')
     #</editor-fold>
     # <editor-fold desc="BODY  : Invoice Line Items">
@@ -132,13 +134,12 @@ def client_invoice(client, me):
     report.append("|{:^10}|{:^30}|{:^3}|{:^10}|{:^10}|{:^10}|".format("Code", "Service", "Qty", "Unit", "VAT", "Subtotal"))
     report.append(hl)
 
-    # rename these accordingly
-    accounts = CONN.select('id, name', 'account')
+    accounts = CONN.select(['id', 'owner', 'name'], ['account'])
 
-    ledger_a = accounts.filter(o(owner=client, name='Supplier Control').x(AS_PYE))['id']
-    ledger_b = accounts.filter(o(owner=me, name='Customer Control').x(AS_PYE))['id']
-    ledger_c = accounts.filter(o(owner=client, name='VAT Control').x(AS_PYE))['id']
-    ledger_d = accounts.filter(o(owner=me, name='VAT Control').x(AS_PYE))['id']
+    ledger_a = accounts.filter(o(owner=client, name='Supplier Control').x(AS_PYE))[0]['id']
+    ledger_b = accounts.filter(o(owner=me, name='Customer Control').x(AS_PYE))[0]['id']
+    ledger_c = accounts.filter(o(owner=client, name='VAT Control').x(AS_PYE))[0]['id']
+    ledger_d = accounts.filter(o(owner=me, name='VAT Control').x(AS_PYE))[0]['id']
 
     row_str = '|{:<10}|{:<30}|{:>3}|{:>10}|{:>10}|{:>10}|'
     total_exvat, total_vat, total_sales = 0, 0, 0
@@ -158,8 +159,8 @@ def client_invoice(client, me):
                               ledger_d))
 
         total_exvat += row['qty'] * row['sales_price']
-        total_vat += row['qty'] * row['sales_price'] * 0.14
-        total_sales += row['qty'] * row['sales_price'] * 1.14
+        total_vat += row['qty'] * row['sales_price'] * VAT_RATE
+        total_sales += row['qty'] * row['sales_price'] * (1 + VAT_RATE)
 
         report.append(row_str.format(row['code'],
                                      row['description'],
@@ -171,7 +172,7 @@ def client_invoice(client, me):
         journal = journal_entry(date, 'Tax Invoice Nr.{}'.format(curr_invoice_nr), *ledgers)
         if journal is not None:
             CONN.query('INSERT INTO {}.tax_invoice (code, reseller, client, journal)'.format(DB_NAME),
-                       (curr_invoice_nr, me, client), (3, -2))
+                       (curr_invoice_nr, me, client, journal))
 
             # call the update functions when applicable
             # CONN.update()

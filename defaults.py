@@ -19,11 +19,11 @@ def md5(f_name):
     return hash_md5.hexdigest()
 
 
-def replace_none(value, alternate):
-    return alternate if value is None else value
+def replace_value(value, alternate, unwanted=None):
+    return alternate if value is unwanted else value
 
 
 def normalise_alias(f_name, l_name, company):
     if company is None:
-        return '{} {}'.format(replace_none(f_name, ''), replace_none(l_name, ''))
+        return '{} {}'.format(replace_value(f_name, ''), replace_value(l_name, ''))
     return company

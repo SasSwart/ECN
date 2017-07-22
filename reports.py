@@ -1,6 +1,5 @@
-
-from connection import Connection, o, AS_PYE
-from defaults import U_NAME, P_WORD, H_NAME, DB_NAME, normalise_alias, replace_none
+from connection import Connection
+from defaults import U_NAME, P_WORD, H_NAME, DB_NAME, normalise_alias, replace_value
 
 
 CONN = Connection(username=U_NAME,
@@ -44,13 +43,13 @@ CLIENT_TOTALS = ("SELECT\n"
                  "GROUP BY entity.code;")
 
 
-def default_report(title, **flags):
+def default_report(title, where):
     hl = '-' * 89
     report = [title, '{:^30} {:^3} {:^10} {:^10} {:^30}'.format('Description', 'Qty', 'Cost', 'Sales', 'Client'), hl]
 
     row_str = '|{:<30}|{:^3}|{:>10}|{:>10}|{:>30}|'
     total_cost, total_sales, total_qty = 0, 0, 0
-    for row in CONN.query(DEFAULT_REPORT).filter(o(**flags).x(AS_PYE)):
+    for row in CONN.query(DEFAULT_REPORT).filter(where.x(AS_PYE)):
         cost_price = row['cost_price'] * row['qty']
         sales_price = row['sales_price'] * row['qty']
 
@@ -67,30 +66,26 @@ def default_report(title, **flags):
 
 
 def internet_solutions_domain():
-    print(default_report(title='IS Domain Reconciliation',
-                         type='domain',
-                         supplier='is0001'))
+    print(default_report('IS Domain Reconciliation',
+                         o(type='domain', supplier='is0001')))
 
 
 def internet_solutions_mobile():
-    print(default_report(title='IS Mobile Reconciliation',
-                         type='mobile',
-                         supplier='is0001'))
+    print(default_report('IS Mobile Reconciliation',
+                         o(type='mobile', supplier='is0001')))
 
 
 def internet_solution_adsl():
-    print(default_report(title='IS Per Account Reconciliation',
-                         type=('peracc', 'uncapped'),
-                         supplier='is0001'))
+    print(default_report('IS Per Account Reconciliation',
+                         o(type=('peracc', 'uncapped'), supplier='is0001')))
 
-    print(default_report(title='IS Per GB Reconciliation',
-                         type='pergb',
-                         supplier='is0001'))
+    print(default_report('IS Per GB Reconciliation',
+                         o(type='pergb', supplier='is0001')))
 
 
 def axxess():
-    print(default_report(title='Axxess Reconciliation',
-                         supplier='axx001'))
+    print(default_report('Axxess Reconciliation',
+                         o(supplier='axx001')))
 
 
 def client_totals():
@@ -99,9 +94,9 @@ def client_totals():
 
     total_cost, total_sales, total_qty = 0, 0, 0
     for row in CONN.query(CLIENT_TOTALS).rows():
-        total_cost += replace_none(row['total_cost'], 0)
-        total_sales += replace_none(row['total_sales'], 0)
-        total_qty += replace_none(row['total_qty'], 0)
+        total_cost += replace_value(row['total_cost'], 0)
+        total_sales += replace_value(row['total_sales'], 0)
+        total_qty += replace_value(row['total_qty'], 0)
 
         name = normalise_alias(row['first_name'], row['last_name'], row['company'])
 
@@ -122,3 +117,9 @@ if __name__ == '__main__':
 
     # client_totals()
     pass
+
+
+title = input("Report Title:\t")
+supplier = input("Supplier Code:\t")
+type = replace_value(input("Service Type:\t"), None, "")
+print(default_report(title, o(supplier=supplier, type=type)))

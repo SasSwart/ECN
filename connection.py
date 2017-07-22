@@ -1,7 +1,5 @@
-
 import decimal
-
-from node import o, AS_SQL, AS_PYE
+from collections import OrderedDict
 from operator import itemgetter
 from mysql import connector
 
@@ -47,12 +45,11 @@ def nest(x):
     return '({})'.format(x)
 """
 
-
 class ResultSet(object):
     def __init__(self, conn, column_names, data, type_norm):
         self.conn = conn
         self.result = [list(map(type_norm, row)) for row in data]
-        self.keymap = {name: index for index, name in enumerate(column_names)}
+        self.keymap = OrderedDict([(name, index) for index, name in enumerate(column_names)])
 
     def row(self, index):
         if 0 <= index < len(self.result):
@@ -64,11 +61,16 @@ class ResultSet(object):
             yield {name: row[index] for name, index in self.keymap.items()}
 
     def filter(self, where, order=None):
+        # order : ((column1, ..., columnN), True|False)
         def check(**kwargs):
             return eval(where, kwargs)
         filtered = [row for row in self.rows() if check(**row)]
         if order is None:
-            return filtered if len(filtered) > 1 else filtered[0]
+            # I've removed the check for if filtered has only one element
+            # The case exists that filtered has no elements because no row satisfies the where clause
+            # In this case we would have to return an empty list, so lets keep it consistent and always return lists
+            # Its typesafe, more versatile and the caller can handle index errors
+            return filtered
         order, direction = order
         filtered = sorted(filtered, key=itemgetter(*order), reverse=direction)
         return filtered if len(filtered) > 1 else filtered[0]
@@ -84,8 +86,11 @@ class Connection(object):
         self.to_execute = []
 
     def select(self, attributes, tables, where=None, order=None):
+        # attributes    : (attr1, attr2, ...)
+        # tables        : (tab1, tab2, ...)
         from_str = ', '.join('{}.{}'.format(self.db_name, table) for table in tables)
-        query_str = 'SELECT {} FROM {}'.format(', '.join(attributes), self.db_name, from_str)
+        query_str = 'SELECT {} FROM {}'.format(', '.join(attributes), from_str)
+        print(query_str)
         if where is not None:
             query_str = '{} WHERE {}'.format(query_str, where)
         if order is None:

@@ -1,4 +1,3 @@
-
 import re
 
 
@@ -37,7 +36,7 @@ def o(*args, **kwargs):
     if kwargs:
         args = _close(' and '.join(
             _close(' or '.join(_relate(k, i) for i in v)) if isinstance(v, tuple) else _relate(k, v)
-            for k, v in kwargs.items()))
+            for k, v in kwargs.items() if v is not None))
         return _ConditionalStatement(args)
     return _ConditionalStatement(*args)
 
@@ -55,7 +54,7 @@ def _multi_replace(s, replacements):
 def _multi_reformat(s, patterns, formatter):
     def reformat(key, value):
         return formatter[key](value)
-    regexp = re.compile('|'.join('({})'.format(p) for p in patterns))
+    regexp = re.compile('|'.join(_close(p) for p in patterns))
     return regexp.sub(lambda match: reformat(*[(k, v) for k, v in match.groupdict().items() if v is not None][0]), s)
 
 
