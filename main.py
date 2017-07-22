@@ -1,5 +1,5 @@
 import sys
-from PyQt5.QtWidgets import QApplication, QMainWindow, QTabWidget, QVBoxLayout, QAction, QTextEdit
+from PyQt5.QtWidgets import QApplication, QMainWindow, QTabWidget, QAction, QTextEdit
 from meta import client_invoice
 
 

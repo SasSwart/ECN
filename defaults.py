@@ -15,7 +15,7 @@ VAT_RATE = 0.14
 
 def md5(f_name):
     hash_md5 = hashlib.md5()
-    hash_md5.update(f_name)
+    hash_md5.update(str(f_name).encode('utf-8'))
     return hash_md5.hexdigest()
 
 

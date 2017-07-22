@@ -1,4 +1,4 @@
-from connection import Connection
+from connection import Connection, o
 from defaults import U_NAME, P_WORD, H_NAME, DB_NAME, normalise_alias, replace_value
 
 
@@ -32,7 +32,7 @@ CLIENT_TOTALS = ("SELECT\n"
                  "    first_name,\n"
                  "    last_name,\n"
                  "    company,\n"
-                 "    client.code,\n"
+                 "    entity.code,\n"
                  "    subscription.service,\n"
                  "    service.supplier,\n"
                  "    service.type\n"
@@ -49,7 +49,7 @@ def default_report(title, where):
 
     row_str = '|{:<30}|{:^3}|{:>10}|{:>10}|{:>30}|'
     total_cost, total_sales, total_qty = 0, 0, 0
-    for row in CONN.query(DEFAULT_REPORT).filter(where.x(AS_PYE)):
+    for row in CONN.query(DEFAULT_REPORT).filter(where):
         cost_price = row['cost_price'] * row['qty']
         sales_price = row['sales_price'] * row['qty']
 
@@ -93,7 +93,7 @@ def client_totals():
     report = ["Client Totals", " {:^30} {:^10} {:^10}".format("Client", "Cost", "Sales"), hl]
 
     total_cost, total_sales, total_qty = 0, 0, 0
-    for row in CONN.query(CLIENT_TOTALS).rows():
+    for row in CONN.query(CLIENT_TOTALS):
         total_cost += replace_value(row['total_cost'], 0)
         total_sales += replace_value(row['total_sales'], 0)
         total_qty += replace_value(row['total_qty'], 0)
