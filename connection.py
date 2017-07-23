@@ -1,11 +1,11 @@
-from datetime import datetime
+
 import decimal
 
-from conditional import o, _multi_replace, AS_SQL, AS_PYE
+from conditional import multi_replace, AS_SQL, AS_PYE
+from factory import factory
+from datetime import datetime
 from operator import itemgetter
 from mysql import connector
-
-from defaults import *
 
 
 """
@@ -56,75 +56,142 @@ def _result(conn, column_names, values, type_norm):
                       {name: index for index, name in enumerate(column_names)})
 
 
-class _PreparedStatement(object):
+"""
+class _PreparedStatement(ControlledFactory):
     def __init__(self, conn):
+        super(_PreparedStatement, self).__init__({
+            'SELECT':   self._select,
+            'FROM':     self._from,
+            'WHERE':    self._where,
+            'GROUP_BY': self._group_by,
+            'ORDER_BY': self._order_by,
+            'END':      self._end})
         self.conn = conn
-        self.keymap = {
-            'SELECT': 0,
-            'FROM': 1,
-            'WHERE': 2,
-            'GROUP_BY': 3,
-            'ORDER_BY': 4
-        }
-        self.statement = [
-            'SELECT columns',
-            'FROM table_names',
-            'WHERE condition',
-            'GROUP BY (column1, column2, ...) ASC|DESC',
-            'ORDER BY (column1, column2, ...) ASC|DESC'
-        ]
+        self.stmt = []
 
-    def _get(self, clause):
-        return self.statement[self.keymap.get(clause, None)]
+        self['SELECT'] = 'SELECT | FROM'
+        self['FROM'] = 'WHERE | GROUP_BY | ORDER_BY | END'
+        self['WHERE'] = 'GROUP_BY | ORDER_BY | END'
+        self['GROUP_BY'] = 'ORDER_BY | END'
+        self['ORDER_BY'] = 'END'
+        self['END'] = 'END'
 
-    def _set(self, clause, set_to):
-        self.statement[self.keymap.get(clause, None)] = set_to
-
-    def select(self, *attributes):
-        self._set('SELECT', self._get('SELECT').replace('columns', '{}').format(', '.join(attributes)))
-        return self._from
+    def _select(self, *attributes):
+        clause = 'SELECT columns'
+        self.stmt.append(clause.replace('columns', '{}').format(', '.join(attributes)))
+        return self
 
     def _from(self, *tables):
-        def_str = '{}.{}'.format(self.conn.db_name, '{}')
-        self._set('FROM', self._get('FROM').replace('table_names', '({})').format(', '.join(def_str.format(x) for x in tables)))
-        return self._where
+        clause = 'FROM table_names'
+        f_str = '{}.{}'.format(self.conn.db_name, '{}')
+        self.stmt.append(clause.replace('table_names', '({})').format(', '.join(f_str.format(x) for x in tables)))
+        return self
 
-    def _where(self, *head):
-        if not head:
-            return self._x('WHERE')
-        if head[0] is None:
-            self._set('WHERE', '')
-            return self._group_by
-        self._set('WHERE', self._get('WHERE').replace('condition', '{}').format(head[0].x(AS_SQL)))
-        return self._group_by
+    def _where(self, condition):
+        clause = 'WHERE condition'
+        self.stmt.append(clause.replace('condition', '{}').format(condition.x(AS_SQL)))
+        return self
 
-    def _group_by(self, *head):
-        if not head:
-            return self._x('GROUP_BY')
-        if head[0] is None:
-            self._set('GROUP_BY', '')
-            return self._order_by
-        groups, direction = head
-        self._set('GROUP_BY', _multi_replace(self._get('GROUP_BY'),
-                                             {'(column1, column2, ...)': '({})',
-                                              'ASC|DESC':                 '{}'}).format(', '.join(groups),
-                                                                                        direction))
-        return self._order_by
+    def _group_by(self, direction, *attributes):
+        clause = 'GROUP BY (column1, column2, ...) ASC|DESC'
+        self.stmt.append(_multi_replace(clause, {'(column1, column2, ...)': '({})',
+                                                 'ASC|DESC': '{}'}).format(', '.join(attributes), direction))
+        return self
 
-    def _order_by(self, *head):
-        if head:
-            attributes, direction = head
-            self._set('ORDER_BY', _multi_replace(self._get('ORDER_BY'),
-                                                 {'(column1, column2, ...)': '({})',
-                                                  'ASC|DESC':                 '{}'}).format(', '.join(attributes),
-                                                                                            direction))
-        return self._x(None)
+    def _order_by(self, direction, *attributes):
+        clause = 'ORDER BY (column1, column2, ...) ASC|DESC'
+        self.stmt.append(_multi_replace(clause, {'(column1, column2, ...)': '({})',
+                                                 'ASC|DESC': '{}'}).format(', '.join(attributes), direction))
+        return self
 
-    def _x(self, clause, execute=True):
-        index = self.keymap.get(clause, len(self.keymap) + 1)
-        self.statement[index:] = [''] * (len(self.keymap) - index)
-        query_str = ' '.join(x for x in self.statement if x) + ';'
-        return self.conn.query(query_str) if execute else query_str
+    def _end(self, execute=True):
+        stmt = ' '.join(self.stmt) + ';'
+        self.stmt.clear()
+        self.reset()
+        if execute:
+            return self.conn.query(stmt)
+        return stmt
+"""
+
+
+class _PreparedStatement(object):
+    def __init__(self, conn):
+        self._conn = conn
+        self._bin = None
+        self._build()
+
+    def _build(self):
+        def select_(*attributes):
+            clause = 'SELECT columns'
+            return clause.replace('columns', '{}').format(', '.join(attributes))
+
+        def from_(*tables):
+            clause = 'FROM table_names'
+            f_str = '{}.{}'.format(self._conn.db_name, '{}')
+            return clause.replace('table_names', '({})').format(', '.join(f_str.format(x) for x in tables))
+
+        def where_(condition):
+            clause = 'WHERE condition'
+            return clause.replace('condition', '{}').format(condition.x(AS_SQL))
+
+        def group_by_(direction, *attributes):
+            clause = 'GROUP BY (column1, column2, ...) ASC|DESC'
+            return multi_replace(clause, {'(column1, column2, ...)': '({})',
+                                          'ASC|DESC': '{}'}).format(', '.join(attributes), direction)
+
+        def order_by_(direction, *attributes):
+            clause = 'ORDER BY (column1, column2, ...) ASC|DESC'
+            return multi_replace(clause, {'(column1, column2, ...)': '({})',
+                                          'ASC|DESC': '{}'}).format(', '.join(attributes), direction)
+
+        def insert_into_(table):
+            clause = 'INSERT INTO table_name'
+            return clause.replace('table_name', '{}.{}').format(self._conn.db_name, table)
+
+        def columns_(*attributes):
+            clause = '(column1, column2, column3, ...)'
+            return clause.replace('(column1, column2, column3, ...)', '({})').format(', '.join(attributes))
+
+        def values_(values):
+            self._bin = values
+            return ''
+
+        def end_(stack, execute=True):
+            stmt = ' '.join(stack) + ';'
+            if execute:
+                if self._bin is None:
+                    return self._conn.query(stmt)
+                data = self._bin
+                self._bin = None
+                return self._conn.query(stmt, data)
+            return stmt
+
+        func_map = {
+            'SELECT':   select_,
+            'FROM':     from_,
+            'WHERE':    where_,
+            'GROUP_BY': group_by_,
+            'ORDER_BY': order_by_,
+
+            'INSERT_INTO': insert_into_,
+            'COLUMNS':     columns_,
+            'VALUES':      values_
+        }
+        ctrl_map = {
+            'SELECT':   'FROM',
+            'FROM':     'WHERE | GROUP_BY | ORDER_BY',
+            'WHERE':    'GROUP_BY | ORDER_BY',
+            'GROUP_BY': 'ORDER_BY',
+            'ORDER_BY': 'NONE',
+
+            'INSERT_INTO': 'COLUMNS | VALUES',
+            'COLUMNS':     'VALUES',
+            'VALUES':      'NONE'
+        }
+        self._factory = factory(func_map, ctrl_map, [], end_)
+
+    def start(self):
+        return self._factory()
 
 
 class _ResultSet(object):
@@ -162,21 +229,16 @@ class Connection(object):
                                       password=password,
                                       host=hostname)
         self.cursor = self.conn.cursor()
+
+        self._prepared_stmt = _PreparedStatement(self)
+
         self.to_execute = []
 
-    def select(self, *attributes):
-        return _PreparedStatement(self).select(*attributes)
-        # from_str = ', '.join('{}.{}'.format(self.db_name, table) for table in tables)
-        # query_str = 'SELECT {} FROM {}'.format(', '.join(attributes), from_str)
-        # if where is not None:
-        #     query_str = '{} WHERE {}'.format(query_str, where)
-        # if order is None:
-        #     return self.query('{};'.format(query_str))
-        # order, direction = order
-        # return self.query('{} ORDER BY ({}) {};'.format(query_str, ', '.join(order), 'ASC' if direction else 'DESC'))
+    def stmt(self):
+        return self._prepared_stmt.start()
 
-    def insert(self, attributes, table, values):
-        self.rep_query('INSERT INTO {}.{} ({})'.format(self.db_name, table, ', '.join(attributes)), values)
+    # def insert(self, attributes, table, values):
+    #     self.rep_query('INSERT INTO {}.{} ({})'.format(self.db_name, table, ', '.join(attributes)), values)
 
     def commit(self):
         self.conn.commit()
@@ -208,10 +270,4 @@ class Connection(object):
         return self.cursor.getlastrowid()
 
 if __name__ == '__main__':
-    CONN = Connection(username=U_NAME,
-                      password=P_WORD,
-                      hostname=H_NAME,
-                      db_name=DB_NAME)
-
-    b = CONN.select('code, name, company')('some_table')(o(x=2, y=3))(('a', 'b'), 'ASC')()
-    print(b)
+    pass

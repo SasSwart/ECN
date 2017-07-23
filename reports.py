@@ -1,4 +1,6 @@
-from connection import Connection, o
+
+from connection import Connection
+from conditional import o
 from defaults import U_NAME, P_WORD, H_NAME, DB_NAME, normalise_alias, replace_value
 
 

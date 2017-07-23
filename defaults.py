@@ -1,4 +1,5 @@
 
+import re
 import hashlib
 
 
@@ -21,6 +22,20 @@ def md5(f_name):
 
 def replace_value(value, alternate, unwanted=None):
     return alternate if value is unwanted else value
+
+
+def multi_replace(s, replacements):
+    substrs = sorted(replacements, key=len, reverse=True)
+    regexp = re.compile('|'.join(map(re.escape, substrs)))
+    return regexp.sub(lambda match: replacements[match.group(0)], s)
+
+
+def multi_reformat(s, patterns, formatter):
+    def matcher(match):
+        key, value = [(k, v) for k, v in match.groupdict().items() if v is not None][0]
+        return formatter[key](value)
+    regexp = re.compile('|'.join('({})'.format(p) for p in patterns))
+    return regexp.sub(matcher, s)
 
 
 def normalise_alias(f_name, l_name, company):

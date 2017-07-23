@@ -1,9 +1,11 @@
+
 import datetime
 import hashlib
 
 from connection import Connection
-from node import o, AS_PYE
+from conditional import o
 from defaults import U_NAME, P_WORD, H_NAME, DB_NAME, PAGE, VAT_RATE, normalise_alias, replace_value
+
 
 CONN = Connection(username=U_NAME,
                   password=P_WORD,
@@ -39,24 +41,103 @@ def journal_entry(date, journal_description, *ledgers, total=None):
     return journal
 
 
-def create_invoice(client, me):
-    pass
-
-
 def ledger(value, description, account):
     return value, description, account
 
 
+def create_invoice(client, me):
+    curr_invoice_nr, date = document_id(), datetime.datetime.now()
+
+    result = CONN.stmt()\
+        ('SELECT')('service.code',         'service.description',
+                   'cost_price',           'sales_price',
+                   'subscription.qty',     'first_name',
+                   'last_name',            'company',
+                   'entity.code',          'subscription.service',
+                   'service.supplier',     'service.type')\
+        ('FROM')('entity',  'subscription',
+                 'service', 'service_type')\
+        ('WHERE')(o('entity.code', 'service.type', 'subscription.service', 'entity.code') *
+                  o('subscription.client', 'service_type.type', 'service.code', '\'{}\''.format(client)))()
+
+    # result = CONN.query("SELECT\n"
+    #                     "    service.code,\n"
+    #                     "    service.description,\n"
+    #                     "    cost_price,\n"
+    #                     "    sales_price,\n"
+    #                     "    subscription.qty,\n"
+    #                     "    first_name,\n"
+    #                     "    last_name,\n"
+    #                     "    company,\n"
+    #                     "    entity.code,\n"
+    #                     "    subscription.service,\n"
+    #                     "    service.supplier,\n"
+    #                     "    service.type\n"
+    #                     "FROM ecn.entity, ecn.subscription, ecn.service, ecn.service_type\n"
+    #                     "WHERE ecn.entity.code = ecn.subscription.client\n"
+    #                     "AND ecn.service.type = ecn.service_type.type\n"
+    #                     "AND ecn.subscription.service = ecn.service.code\n"
+    #                     "AND ecn.entity.code = '{}';".format(client))
+
+    accounts = CONN.stmt()('SELECT')('id', 'name', 'owner')('FROM')('account')()
+
+    ledger_a = accounts.filter(o(owner=client, name='Supplier Control'))[0]['id']
+    ledger_b = accounts.filter(o(owner=me, name='Customer Control'))[0]['id']
+    ledger_c = accounts.filter(o(owner=client, name='VAT Control'))[0]['id']
+    ledger_d = accounts.filter(o(owner=me, name='VAT Control'))[0]['id']
+
+    ledgers = []
+    for row in result:
+        ledgers.append(ledger(row['sales_price'],
+                              row['description'],
+                              ledger_a))
+        ledgers.append(ledger(row['sales_price'] * -1,
+                              row['description'],
+                              ledger_b))
+        ledgers.append(ledger(row['sales_price'] * VAT_RATE,
+                              "VAT on " + row['description'],
+                              ledger_c))
+        ledgers.append(ledger(row['sales_price'] * -VAT_RATE,
+                              "VAT on " + row['description'],
+                              ledger_d))
+
+    if len(ledgers) > 0:
+        journal = journal_entry(str(date), 'Tax Invoice Nr.{}'.format(curr_invoice_nr), *ledgers)
+        if journal is not None:
+            CONN.query('INSERT INTO {}.tax_invoice (code, reseller, client, journal)'.format(DB_NAME),
+                       (curr_invoice_nr, me, client, journal))
+            CONN.update()
+            CONN.commit()
+            return True
+    return False
+
+
 def fetch_invoice(invoice_nr):
-    tax_invoice = CONN.select('*')('tax_invoice')(o(code='b5d8ca3d85'))()
+    tax_invoice = CONN.stmt()\
+        ('SELECT')('*')\
+        ('FROM')('tax_invoice')\
+        ('WHERE')(o(code='b5d8ca3d85'))()
 
-    reseller = CONN.select('code', 'first_name', 'last_name', 'company', 'vat', 'physical_address', 'postal_address')('entity')(o(code=tax_invoice[0]['reseller']))()
+    reseller = CONN.stmt()\
+        ('SELECT')('code', 'first_name', 'last_name', 'company', 'vat', 'physical_address', 'postal_address')\
+        ('FROM')('entity')\
+        ('WHERE')(o(code=tax_invoice[0]['reseller']))()
 
-    client = CONN.select('code', 'first_name', 'last_name', 'company', 'vat', 'physical_address', 'postal_address')('entity')(o(code=tax_invoice[0]['client']))()
+    client = CONN.stmt()\
+        ('SELECT')('code', 'first_name', 'last_name', 'company', 'vat', 'physical_address', 'postal_address')\
+        ('FROM')('entity')\
+        ('WHERE')(o(code=tax_invoice[0]['client']))()
 
-    journal = CONN.select('id', 'date', 'description')('journal')(o(id=tax_invoice[0]['journal']))()
+    journal = CONN.stmt()\
+        ('SELECT')('id', 'date', 'description')\
+        ('FROM')('journal')\
+        ('WHERE')(o(id=tax_invoice[0]['journal']))()
 
-    lines = CONN.select('description', 'qty', 'value')('account_line_item')(o('value') > o(0))(None)(('description',), 'DESC')
+    lines = CONN.stmt()\
+        ('SELECT')('description', 'qty', 'value')\
+        ('FROM')('account_line_item')\
+        ('WHERE')(o('value') > o(0))\
+        ('ORDER_BY')('DESC', 'description')()
 
     print(print_invoice(reseller, client, journal, lines))
 
@@ -105,14 +186,13 @@ def print_invoice(reseller, client, journal, lines):
         total_exvat += line['qty'] * line['value']
         total_vat += line['qty'] * line['value'] * VAT_RATE
         total_sales += line['qty'] * line['value'] * (1 + VAT_RATE)
-
-
     report.append(hl)
     return ''.join(report)
 
 
 def client_invoice(client, me):
     curr_invoice_nr = document_id()
+    report = []
 
     # <editor-fold desc="HEADER: Supplier Letterhead">
     row = CONN.query("SELECT\n"
@@ -190,7 +270,7 @@ def client_invoice(client, me):
     report.append(hl)
 
     # rename these accordingly
-    accounts = CONN.select(('id', 'name', 'owner'), 'account')
+    accounts = CONN.stmt()('SELECT')('id', 'name', 'owner')('FROM')('account')()
 
     ledger_a = accounts.filter(o(owner=client, name='Supplier Control'))[0]['id']
     ledger_b = accounts.filter(o(owner=me, name='Customer Control'))[0]['id']
@@ -247,9 +327,7 @@ def client_invoice(client, me):
 
 def monthly_accounts_per_client(PRINT_ZEROES=False):
     report = []
-    result = CONN.query("SELECT\n"
-                        "   entity.code\n"
-                        "FROM ecn.entity;")
+    result = CONN.stmt()('SELECT')('code')('FROM')('entity')()
     for row in result.rows():
         invoice = client_invoice(row['code'], "ecn001")
         if invoice[1] > 0 or PRINT_ZEROES:
