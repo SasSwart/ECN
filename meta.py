@@ -105,28 +105,72 @@ def fetch_invoice(invoice_nr):
     tax_invoice = CONN.stmt()\
         ('SELECT')('*')\
         ('FROM')('tax_invoice')\
-        ('WHERE')(o(code='b5d8ca3d85'))()
+        ('WHERE')(o(code=literal(invoice_nr)))()
 
     reseller = CONN.stmt()\
         ('SELECT')('code', 'first_name', 'last_name', 'company', 'vat', 'physical_address', 'postal_address')\
         ('FROM')('entity')\
-        ('WHERE')(o(code=tax_invoice[0]['reseller']))()
+        ('WHERE')(o(code=literal(tax_invoice[0]['reseller'])))()
 
     client = CONN.stmt()\
         ('SELECT')('code', 'first_name', 'last_name', 'company', 'vat', 'physical_address', 'postal_address')\
         ('FROM')('entity')\
-        ('WHERE')(o(code=tax_invoice[0]['client']))()
+        ('WHERE')(o(code=literal(tax_invoice[0]['client'])))()
 
     journal = CONN.stmt()\
         ('SELECT')('id', 'date', 'description')\
         ('FROM')('journal')\
-        ('WHERE')(o(id=tax_invoice[0]['journal']))()
+        ('WHERE')(o(id=literal(tax_invoice[0]['journal'])))()
 
     lines = CONN.stmt()\
         ('SELECT')('journal', 'description', 'qty', 'value')\
         ('FROM')('account_line_item')\
-        ('WHERE')((o('value') > o(0)) & o(journal=journal[0]['id']))\
+        ('WHERE')((o('value') > o(0)) & o(journal=literal(journal[0]['id'])))\
         ('ORDER_BY')('description', 'DESC', 'value', 'DESC')()
+
+    """ To Be implemented:
+        This is an improved query for lines, that groups each transaction and its VAT, eliminating the need for
+        preprocessing in Python.
+
+        It required support for join syntax and the AS keyword
+
+        SELECT
+            DISTINCT  l.id,
+            l.journal,
+            l.account AS ACCOUNT,
+            l.value as EX_VAT,
+            r.value as VAT,
+            r.account as CONTRA,
+            l.description,
+            l.qty
+        FROM
+            ecn.account_line_item AS l
+        JOIN
+            ecn.account_line_item AS r
+        WHERE
+            l.value*0.14 = r.value
+            and l.value > 0
+            and l.journal = r.journal;
+    """
+
+    lines = CONN.query("SELECT\
+            DISTINCT  l.id,\
+            l.journal,\
+            l.account AS ACCOUNT,\
+            l.value as EX_VAT,\
+            r.value as VAT,\
+            r.account as CONTRA,\
+            l.description,\
+            l.qty\
+        FROM\
+            ecn.account_line_item AS l\
+        JOIN\
+            ecn.account_line_item AS r\
+        WHERE\
+            l.value*0.14 = r.value\
+            and l.value > 0\
+            and l.journal = r.journal\
+            and l.journal = {};".format(literal(tax_invoice[0]['journal'])))
 
     print(print_invoice(reseller, client, journal, lines))
 
@@ -174,17 +218,17 @@ def print_invoice(reseller, client, journal, lines):
 
     total_exvat, total_vat, total_sales = 0, 0, 0
     row_str = '|{:<10}|{:<30}|{:>3}|{:>10}|{:>10}|{:>10}|\n'
-    for line in [(lines[i], lines[i+1]) for i in range(0,len(lines),2)]:
-        total_exvat += line[0]['qty'] * line[0]['value']
-        total_vat += line[1]['qty'] * line[1]['value']
-        total_sales += line[0]['qty'] * (line[0]['value']+line[1]['value'])
+    for line in lines:
+        total_exvat += line['qty'] * line['EX_VAT']
+        total_vat += line['qty'] * line['VAT']
+        total_sales += line['qty'] * (line['EX_VAT']+line['VAT'])
 
-        report.append(row_str.format(line[0]['journal'],
-                                     line[0]['description'],
-                                     line[0]['qty'],
-                                     round(line[0]['value'], 2),
-                                     round(line[1]['value'], 2),
-                                     round(line[0]['qty'] * (line[0]['value'] + line[1]['value']), 2)))
+        report.append(row_str.format(line['journal'],
+                                     line['description'],
+                                     line['qty'],
+                                     round(line['EX_VAT'], 2),
+                                     round(line['VAT'], 2),
+                                     round(line['qty'] * (line['EX_VAT'] + line['VAT']), 2)))
 
     report.append(hl)
     report.append("|{:<40}  {:>3}|{:>10}|{:>10}|{:>10}|\n".format(
@@ -339,4 +383,4 @@ def monthly_accounts_per_client(PRINT_ZEROES=False):
 
 
 if __name__ == '__main__':
-    print(create_invoice('gbg001', 'ecn001'))
+    fetch_invoice('6bf476d5ca')
