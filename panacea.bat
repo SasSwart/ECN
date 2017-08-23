@@ -1,1 +1,2 @@
-python main.pyw
+pythonw main.py
+pause

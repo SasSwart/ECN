@@ -2,7 +2,6 @@
 import re
 import hashlib
 
-
 H_NAME = "192.168.0.33"
 U_NAME = "root"
 P_WORD = "Hunt!ngSpr!ngbuck123"
@@ -12,6 +11,9 @@ DB_NAME = 'ecn'
 PAGE = (85, 58)
 
 VAT_RATE = 0.14
+
+QDATE_FORMAT = "yyyy-MM-dd"
+DATE_FORMAT = ""
 
 
 def md5(f_name):

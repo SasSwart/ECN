@@ -50,6 +50,22 @@ def ledger(value, description, account):
     return value, description, account
 
 
+def fetch_statement(client, reseller):
+    reseller = CONN.stmt() \
+        ('SELECT')('code', 'first_name', 'last_name', 'company', 'vat', 'physical_address', 'postal_address') \
+        ('FROM')('entity') \
+        ('WHERE')(o(code=literal(reseller)))()
+
+    client = CONN.stmt() \
+        ('SELECT')('code', 'first_name', 'last_name', 'company', 'vat', 'physical_address', 'postal_address') \
+        ('FROM')('entity') \
+        ('WHERE')(o(code=literal(client)))()
+
+    account = CONN.stmt()('SELECT')('owner', 'id', 'name')('FROM')('account')('WHERE')(o(owner=literal(reseller[0]['code'])))()
+    print(*account)
+    # invoices = CONN.stmt()('SELECT')('id', 'date', 'value', 'description')('FROM')('journal')('WHERE')
+
+
 def create_invoice(client, me):
     curr_invoice_nr, date = document_id(), datetime.datetime.now()
 
@@ -97,8 +113,19 @@ def create_invoice(client, me):
 
             CONN.update()
             CONN.commit()
-            return True
+            return print_invoice(curr_invoice_nr)
     return False
+
+
+def delete_invoice(invoice_nr):
+    tax_invoice = CONN.stmt()\
+        ('SELECT')('*')\
+        ('FROM')('tax_invoice')\
+        ('WHERE')(o(code=literal(invoice_nr)))()
+    journal_nr = tax_invoice[0]['journal']
+    CONN.stmt()('DELETE')('account_line_item')('WHERE')(o(journal=literal(journal_nr)))()
+    CONN.stmt()('DELETE')('tax_invoice')('WHERE')(o(journal=literal(journal_nr)))()
+    CONN.stmt()('DELETE')('journal')('WHERE')(o(id=literal(journal_nr)))()
 
 
 def fetch_invoice(invoice_nr):
@@ -130,7 +157,7 @@ def fetch_invoice(invoice_nr):
 
     """ To Be implemented:
         This is an improved query for lines, that groups each transaction and its VAT, eliminating the need for
-        preprocessing in Python.
+        pre-processing in Python.
 
         It required support for join syntax and the AS keyword
 
@@ -172,10 +199,11 @@ def fetch_invoice(invoice_nr):
             and l.journal = r.journal\
             and l.journal = {};".format(literal(tax_invoice[0]['journal'])))
 
-    print(print_invoice(reseller, client, journal, lines))
+    return reseller, client, journal, lines
 
 
-def print_invoice(reseller, client, journal, lines):
+def print_invoice(invoice_nr):
+    reseller, client, journal, lines = fetch_invoice(invoice_nr)
     reseller = reseller[0]
     client = client[0]
     journal = journal[0]
@@ -237,150 +265,15 @@ def print_invoice(reseller, client, journal, lines):
     return ''.join(report)
 
 
-def client_invoice(client, me):
-    curr_invoice_nr = document_id()
-    report = []
-
-    # <editor-fold desc="HEADER: Supplier Letterhead">
-    row = CONN.query("SELECT\n"
-                     "    entity.code,\n"
-                     "    first_name,\n"
-                     "    last_name,\n"
-                     "    company,\n"
-                     "    vat,\n"
-                     "    physical_address,\n"
-                     "    postal_address\n"
-                     "FROM ecn.entity\n"
-                     "WHERE ecn.entity.code = '{}';".format(me))[0]
-
-    header_line = '{:<30}     {:^15}     {:>25}\n'
-
-    date = datetime.datetime.now()
-    name = normalise_alias(row['first_name'], row['last_name'], row['company'])
-    address = replace_value(row['physical_address'], replace_value(row['postal_address'], ''))
-
-    street, town, zip_code = address.split(', ') if address else ('', '', '')
-
-    report.append((header_line * 5 + "\n\n").format(name, "", "",
-                                                    street, "", 'Code: {}'.format(row['code']),
-                                                    town, "", "",
-                                                    zip_code, "", "",
-                                                    "VAT: " + replace_value(row['vat'], ''), '', ''))
-    # </editor-fold>
-    # <editor-fold desc="HEADER: Salutation">
-    row = CONN.query("SELECT\n"
-                     "    entity.code,\n"
-                     "    first_name,\n"
-                     "    last_name,\n"
-                     "    company,\n"
-                     "    vat,\n"
-                     "    physical_address,\n"
-                     "    postal_address\n"
-                     "FROM ecn.entity\n"
-                     "WHERE ecn.entity.code = '{}';".format(client))[0]
-
-    name = normalise_alias(row['first_name'], row['last_name'], row['company'])
-    address = replace_value(row['physical_address'], replace_value(row['postal_address'], ''))
-    street, town, zip_code = address.split(', ') if address else ('', '', '')
-
-    report.append((header_line * 5 + "\n\n").format(name, "", "",
-                                                    street, "", 'Code: {}'.format(row['code']),
-                                                    town, "", "",
-                                                    zip_code, "", "",
-                                                    "VAT: " + replace_value(row['vat'], ''), '', ''))
-    report.append('\n')
-    # </editor-fold>
-    # <editor-fold desc="BODY  : Invoice Line Items">
-    result = CONN.query("SELECT\n"
-                        "    service.code,\n"
-                        "    service.description,\n"
-                        "    cost_price,\n"
-                        "    sales_price,\n"
-                        "    subscription.qty,\n"
-                        "    first_name,\n"
-                        "    last_name,\n"
-                        "    company,\n"
-                        "    entity.code,\n"
-                        "    subscription.service,\n"
-                        "    service.supplier,\n"
-                        "    service.type\n"
-                        "FROM ecn.entity, ecn.subscription, ecn.service, ecn.service_type\n"
-                        "WHERE ecn.entity.code = ecn.subscription.client\n"
-                        "AND ecn.service.type = ecn.service_type.type\n"
-                        "AND ecn.subscription.service = ecn.service.code\n"
-                        "AND ecn.entity.code = '{}';".format(client))
-
-    hl = "+" + "-" * 78 + '+'
-    report.append(hl)
-    report.append(
-        "|{:^10}|{:^30}|{:^3}|{:^10}|{:^10}|{:^10}|".format("Code", "Service", "Qty", "Unit", "VAT", "Subtotal"))
-    report.append(hl)
-
-    # rename these accordingly
-    accounts = CONN.stmt()('SELECT')('id', 'name', 'owner')('FROM')('account')()
-
-    ledger_a = accounts.filter(o(owner=client, name='Supplier Control'))[0]['id']
-    ledger_b = accounts.filter(o(owner=me, name='Customer Control'))[0]['id']
-    ledger_c = accounts.filter(o(owner=client, name='VAT Control'))[0]['id']
-    ledger_d = accounts.filter(o(owner=me, name='VAT Control'))[0]['id']
-
-    row_str = '|{:<10}|{:<30}|{:>3}|{:>10}|{:>10}|{:>10}|'
-    total_exvat, total_vat, total_sales = 0, 0, 0
-    ledgers = []
-    for row in result:
-        ledgers.append(ledger(row['sales_price'],
-                              row['description'],
-                              ledger_a))
-        ledgers.append(ledger(row['sales_price'] * -1,
-                              row['description'],
-                              ledger_b))
-        ledgers.append(ledger(row['sales_price'] * VAT_RATE,
-                              "VAT on " + row['description'],
-                              ledger_c))
-        ledgers.append(ledger(row['sales_price'] * -VAT_RATE,
-                              "VAT on " + row['description'],
-                              ledger_d))
-
-        total_exvat += row['qty'] * row['sales_price']
-        total_vat += row['qty'] * row['sales_price'] * VAT_RATE
-        total_sales += row['qty'] * row['sales_price'] * (1 + VAT_RATE)
-
-        report.append(row_str.format(row['code'],
-                                     row['description'],
-                                     row['qty'],
-                                     round(row['sales_price'], 2),
-                                     round(row['sales_price'] * VAT_RATE, 2),
-                                     round(row['qty'] * row['sales_price'] * (1 + VAT_RATE), 2)))
-    if len(ledgers) > 0:
-        journal = journal_entry(str(date), 'Tax Invoice Nr.{}'.format(curr_invoice_nr), *ledgers)
-        if journal is not None:
-            CONN.query('INSERT INTO {}.tax_invoice (code, reseller, client, journal)'.format(DB_NAME),
-                       (curr_invoice_nr, me, client, journal))
-
-            # call the update functions when applicable
-            CONN.update()
-            CONN.commit()
-
-    report.append(hl)
-    report.append("|{:<40}  {:>3}|{:>10}|{:>10}|{:>10}|".format(
-        "Totals", "", round(total_exvat, 2), round(total_vat, 2), round(total_sales, 2)))
-    report.append(hl)
-    # </editor-fold>
-
-    # Center the report on the page
-    report = '\n'.join(['{:^{}}'.format(line, PAGE[0]) for line in report]) + "\n" * (PAGE[1] - len(report) % PAGE[1])
-    return report, total_sales
-
-
 def monthly_accounts_per_client(PRINT_ZEROES=False):
     report = []
     result = CONN.stmt()('SELECT')('code')('FROM')('entity')()
     for row in result.rows():
-        invoice = client_invoice(row['code'], "ecn001")
+        invoice = create_invoice(row['code'], "ecn001")
         if invoice[1] > 0 or PRINT_ZEROES:
             report.append(invoice[0])
     return report
 
 
 if __name__ == '__main__':
-    fetch_invoice('6bf476d5ca')
+    print(create_invoice('gre003', 'ecn001'))

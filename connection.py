@@ -6,112 +6,13 @@ from factory import factory
 from datetime import datetime
 from operator import itemgetter
 from mysql import connector
-
-
-"""
-from collections import defaultdict
-
-
-def replace_strs(s, replacements):
-    substrs = sorted(replacements, key=len, reverse=True)
-    regexp = re.compile('|'.join(map(re.escape, substrs)))
-    return regexp.sub(lambda match: replacements[match.group(0)], s)
-
-
-def where(as_str=False, term=None, **conds):
-    def check(row):
-        return eval(replace_strs(and_(term, **conds), {'=': '==', "'~": "row['", '~': "']"}))
-    if term is None:
-        return where(as_str, and_(**conds))
-    if as_str:
-        return 'WHERE {}'.format(replace_strs(and_(term, **conds), {"'~": '', '~': '', 'or': 'OR', 'and': 'AND'}))
-    return check
-
-
-def _join(operator, relation, *terms, **conds):
-    a, b = (' {} '.format(operator)).join(terms), ' and '.join("'~{}~ {} {}".format(k, relation, v) for k, v in conds.items())
-    return '{} {} {}'.format(a, operator, b) if a and b else a + b
-
-
-def and_(*terms, **conds):
-    return _join('and', '=', *terms, **conds)
-
-
-def or_(*terms, **conds):
-    return _join('or', '=', *terms, **conds)
-
-
-def lt_(**conds):
-    return _join('or', '<', **conds)
-
-
-def nest(x):
-    return '({})'.format(x)
-"""
+from defaults import U_NAME, P_WORD, H_NAME, DB_NAME
 
 
 def _result(conn, column_names, values, type_norm):
     return _ResultSet(conn,
                       [list(map(type_norm, row)) for row in values],
                       {name: index for index, name in enumerate(column_names)})
-
-
-"""
-class _PreparedStatement(ControlledFactory):
-    def __init__(self, conn):
-        super(_PreparedStatement, self).__init__({
-            'SELECT':   self._select,
-            'FROM':     self._from,
-            'WHERE':    self._where,
-            'GROUP_BY': self._group_by,
-            'ORDER_BY': self._order_by,
-            'END':      self._end})
-        self.conn = conn
-        self.stmt = []
-
-        self['SELECT'] = 'SELECT | FROM'
-        self['FROM'] = 'WHERE | GROUP_BY | ORDER_BY | END'
-        self['WHERE'] = 'GROUP_BY | ORDER_BY | END'
-        self['GROUP_BY'] = 'ORDER_BY | END'
-        self['ORDER_BY'] = 'END'
-        self['END'] = 'END'
-
-    def _select(self, *attributes):
-        clause = 'SELECT columns'
-        self.stmt.append(clause.replace('columns', '{}').format(', '.join(attributes)))
-        return self
-
-    def _from(self, *tables):
-        clause = 'FROM table_names'
-        f_str = '{}.{}'.format(self.conn.db_name, '{}')
-        self.stmt.append(clause.replace('table_names', '({})').format(', '.join(f_str.format(x) for x in tables)))
-        return self
-
-    def _where(self, condition):
-        clause = 'WHERE condition'
-        self.stmt.append(clause.replace('condition', '{}').format(condition.x(AS_SQL)))
-        return self
-
-    def _group_by(self, direction, *attributes):
-        clause = 'GROUP BY (column1, column2, ...) ASC|DESC'
-        self.stmt.append(_multi_replace(clause, {'(column1, column2, ...)': '({})',
-                                                 'ASC|DESC': '{}'}).format(', '.join(attributes), direction))
-        return self
-
-    def _order_by(self, direction, *attributes):
-        clause = 'ORDER BY (column1, column2, ...) ASC|DESC'
-        self.stmt.append(_multi_replace(clause, {'(column1, column2, ...)': '({})',
-                                                 'ASC|DESC': '{}'}).format(', '.join(attributes), direction))
-        return self
-
-    def _end(self, execute=True):
-        stmt = ' '.join(self.stmt) + ';'
-        self.stmt.clear()
-        self.reset()
-        if execute:
-            return self.conn.query(stmt)
-        return stmt
-"""
 
 
 class _PreparedStatement(object):
@@ -124,6 +25,10 @@ class _PreparedStatement(object):
         def select_(*attributes):
             clause = 'SELECT columns'
             return clause.replace('columns', '{}').format(', '.join(attributes))
+
+        def delete_(*attributes):
+            clause = 'DELETE FROM {}.{}'
+            return clause.format(self._conn.db_name, ', '.join(attributes))
 
         def from_(*tables):
             clause = 'FROM table_names'
@@ -169,6 +74,7 @@ class _PreparedStatement(object):
 
         func_map = {
             'SELECT':   select_,
+            'DELETE':   delete_,
             'FROM':     from_,
             'WHERE':    where_,
             'GROUP_BY': group_by_,
@@ -180,6 +86,7 @@ class _PreparedStatement(object):
         }
         ctrl_map = {
             'SELECT':   'FROM',
+            'DELETE':   'WHERE',
             'FROM':     'WHERE | GROUP_BY | ORDER_BY',
             'WHERE':    'GROUP_BY | ORDER_BY',
             'GROUP_BY': 'ORDER_BY',
@@ -221,6 +128,9 @@ class _ResultSet(object):
             return _ResultSet(self.conn, filtered.copy(), self.keymap.copy())
         order, direction = order
         return _ResultSet(self.conn, sorted(filtered, key=itemgetter(*order), reverse=direction), self.keymap.copy())
+
+    def get_headers(self):
+        return self.keymap.keys
 
 
 class Connection(object):
@@ -268,6 +178,11 @@ class Connection(object):
     def rep_query(self, stmt, values):
         self.cursor.executemany('{} VALUES ({});'.format(stmt, ', '.join(['%s'] * len(values[0]))), values)
         return self.cursor.getlastrowid()
+
+CONN = Connection(username=U_NAME,
+                  password=P_WORD,
+                  hostname=H_NAME,
+                  db_name=DB_NAME)
 
 if __name__ == '__main__':
     pass

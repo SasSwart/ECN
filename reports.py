@@ -1,11 +1,5 @@
-from connection import Connection
-from defaults import U_NAME, P_WORD, H_NAME, DB_NAME, normalise_alias, replace_value
-
-
-CONN = Connection(username=U_NAME,
-                  password=P_WORD,
-                  hostname=H_NAME,
-                  db_name=DB_NAME)
+from defaults import normalise_alias, replace_value
+from connection import CONN
 
 DEFAULT_REPORT = ("SELECT\n"
                   "    service.description,\n"
