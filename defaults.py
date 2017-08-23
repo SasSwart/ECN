@@ -12,8 +12,8 @@ PAGE = (85, 58)
 
 VAT_RATE = 0.14
 
-QDATE_FORMAT = "yyyy-MM-dd"
-DATE_FORMAT = ""
+QDATE_FORMAT = 'yyyy-MM-dd'
+DATE_FORMAT = ''
 
 
 def md5(f_name):
@@ -47,8 +47,4 @@ def normalise_alias(f_name, l_name, company):
 
 
 def literal(s):
-    if s[0] == '\'' or s[0] == '"':
-        s = s[1:]
-    if s[-1] == '\'' or s[-1] == '"':
-        s = s[:-1]
-    return '\'{}\''.format(s)
+    return '\'{}\''.format(s.strip(s[0] if s[0] in '\'\"' else ''))

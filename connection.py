@@ -26,9 +26,9 @@ class _PreparedStatement(object):
             clause = 'SELECT columns'
             return clause.replace('columns', '{}').format(', '.join(attributes))
 
-        def delete_(*attributes):
-            clause = 'DELETE FROM {}.{}'
-            return clause.format(self._conn.db_name, ', '.join(attributes))
+        def delete_():
+            clause = 'DELETE'
+            return clause
 
         def from_(*tables):
             clause = 'FROM table_names'
@@ -44,11 +44,10 @@ class _PreparedStatement(object):
             return multi_replace(clause, {'(column1, column2, ...)': '({})',
                                           'ASC|DESC': '{}'}).format(', '.join(attributes), direction)
 
-        def order_by_(*attributes):
-            attributes = [(attributes[i], attributes[i+1]) for i in range(0, len(attributes), 2)]
+        def order_by_(direction, *attributes):
             clause = 'ORDER BY (column1, column2, ...) ASC|DESC'
-            return multi_replace(clause, {'(column1, column2, ...)': '{}',
-                                          'ASC|DESC': ''}).format(', '.join('{} {}'.format(a[0], a[1]) for a in attributes))
+            return multi_replace(clause, {'(column1, column2, ...)': '({})',
+                                          'ASC|DESC': '{}'}).format(', '.join(attributes), direction)
 
         def insert_into_(table):
             clause = 'INSERT INTO table_name'
@@ -86,7 +85,7 @@ class _PreparedStatement(object):
         }
         ctrl_map = {
             'SELECT':   'FROM',
-            'DELETE':   'WHERE',
+            'DELETE':   'FROM',
             'FROM':     'WHERE | GROUP_BY | ORDER_BY',
             'WHERE':    'GROUP_BY | ORDER_BY',
             'GROUP_BY': 'ORDER_BY',
@@ -147,9 +146,6 @@ class Connection(object):
 
     def stmt(self):
         return self._prepared_stmt.start()
-
-    # def insert(self, attributes, table, values):
-    #     self.rep_query('INSERT INTO {}.{} ({})'.format(self.db_name, table, ', '.join(attributes)), values)
 
     def commit(self):
         self.conn.commit()

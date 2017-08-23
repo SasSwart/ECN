@@ -122,6 +122,8 @@ class _ConditionalClause(object):
                 return o(_relate(self.expr[0], other.expr[0], 'GE'))
         return
 
+    # MISCELLANEOUS
+
     def __str__(self):
         return str(self.expr)
 

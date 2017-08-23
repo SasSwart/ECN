@@ -1,5 +1,8 @@
-from defaults import normalise_alias, replace_value
+
+from defaults import normalise_alias, replace_value, literal
+from conditional import o
 from connection import CONN
+
 
 DEFAULT_REPORT = ("SELECT\n"
                   "    service.description,\n"
@@ -61,25 +64,30 @@ def default_report(title, where):
 
 def internet_solutions_domain():
     print(default_report('IS Domain Reconciliation',
-                         o(type='domain', supplier='is0001')))
+                         o(type=literal('domain'),
+                           supplier=literal('is0001'))))
 
 
 def internet_solutions_mobile():
     print(default_report('IS Mobile Reconciliation',
-                         o(type='mobile', supplier='is0001')))
+                         o(type=literal('mobile'),
+                           supplier=literal('is0001'))))
 
 
 def internet_solution_adsl():
     print(default_report('IS Per Account Reconciliation',
-                         o(type=('peracc', 'uncapped'), supplier='is0001')))
+                         o(type=(literal('peracc'), literal('uncapped')),
+                           supplier=literal('is0001'))))
+    print()
 
     print(default_report('IS Per GB Reconciliation',
-                         o(type='pergb', supplier='is0001')))
+                         o(type=literal('pergb'),
+                           supplier=literal('is0001'))))
 
 
 def axxess():
     print(default_report('Axxess Reconciliation',
-                         o(supplier='axx001')))
+                         o(supplier=literal('axx001'))))
 
 
 def client_totals():
@@ -107,13 +115,13 @@ if __name__ == '__main__':
 
     # internet_solutions_domain()
 
-    # internet_solutions_mobile()
+    internet_solutions_mobile()
 
     # client_totals()
     pass
 
 
-title = input("Report Title:\t")
-supplier = input("Supplier Code:\t")
-type = replace_value(input("Service Type:\t"), None, "")
-print(default_report(title, o(supplier=supplier, type=type)))
+# title = input("Report Title:\t")
+# supplier = input("Supplier Code:\t")
+# type = replace_value(input("Service Type:\t"), None, "")
+# print(default_report(title, o(supplier=supplier, type=type)))
