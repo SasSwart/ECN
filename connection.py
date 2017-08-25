@@ -1,12 +1,12 @@
 import decimal
 
-from conditional import multi_replace, AS_SQL, AS_PYE
+from conditional import AS_SQL, AS_PYE
 from factory import factory
 from datetime import datetime
-from operator import itemgetter
+from operator import itemgetter, getitem, setitem
 from itertools import filterfalse
 from mysql import connector
-from defaults import U_NAME, P_WORD, H_NAME, DB_NAME
+from defaults import U_NAME, P_WORD, H_NAME, DB_NAME, multi_replace
 
 
 def _result(conn, column_names, values, type_norm):
@@ -125,19 +125,21 @@ class _ResultSet(object):
 
     def merge(self, name, blender, *attributes):
         splits = sorted([pair for pair in self._keymap.items() if pair[0] not in attributes], key=itemgetter(1))
-        merges = [[row[k] for k, v in splits] + [blender(*[row[k] for k in attributes])] for row in self]
+        merges = [[row[k] for k, v in splits] + [blender(*(row[k] for k in attributes))] for row in self]
         splits.append((name, len(splits)))
         return _ResultSet(self._conn, merges, {name: new_i for new_i, (name, old_i) in enumerate(splits)})
 
-    def filter(self, where):
+    def refine(self, where):
         def check(**kwargs):
             return eval(where.x(AS_PYE), kwargs)
-
         filtered = [self._result[i][:] for i in range(len(self)) if check(**self._mapped[i])]
         return _ResultSet(self._conn, filtered, self._keymap.copy())
 
     def order_by(self, *attributes):
-        pairs, sort_pass = [pair.split(' ') for pair in attributes], self._result[:]
+        def as_order(pair):
+            a, b = pair.split(' ')
+            return a, b == 'ASC'
+        pairs, sort_pass = [as_order(pair) for pair in attributes], self._result[:]
         asc = [self._keymap[name] for name, direction in filter(itemgetter(1), pairs)]
         desc = [self._keymap[name] for name, direction in filterfalse(itemgetter(1), pairs)]
         if asc:
@@ -174,8 +176,8 @@ class Connection(object):
 
     def query(self, stmt, values=None):
         def type_norm(x):
-            if x is None:
-                return str(None)
+            # if x is None:
+            #     return str(None)
             if isinstance(x, decimal.Decimal):
                 return float(x)
             if isinstance(x, datetime):

@@ -40,23 +40,22 @@ CLIENT_TOTALS = ("SELECT\n"
                  "GROUP BY entity.code;")
 
 
-def default_report(title, where, order=(False, 'qty', 'sales_price')):
+def default_report(title, where, order=('name DESC', 'sales_price DESC')):
     hl = '-' * 89
     report = [title, '{:^30} {:^3} {:^10} {:^10} {:^30}'.format('Description', 'Qty', 'Cost', 'Sales', 'Client'), hl]
 
     row_str = '|{:<30}|{:^3}|{:>10}|{:>10}|{:>30}|'
     total_cost, total_sales, total_qty = 0, 0, 0
-    for row in CONN.query(DEFAULT_REPORT).filter(where).order_by(*order):
+    for row in CONN.query(DEFAULT_REPORT).\
+            merge('name', normalise_alias, 'first_name', 'last_name', 'company').refine(where).order_by(*order):
         cost_price = row['cost_price'] * row['qty']
         sales_price = row['sales_price'] * row['qty']
-
-        name = normalise_alias(row['first_name'], row['last_name'], row['company'])
 
         total_cost += cost_price
         total_sales += sales_price
         total_qty += row['qty']
 
-        report.append(row_str.format(row['description'], row['qty'], cost_price, sales_price, name))
+        report.append(row_str.format(row['description'], row['qty'], cost_price, sales_price, row['name']))
     report.append(hl)
     report.append(' {:<30} {:^3} {:>10} {:>10}'.format('Total', total_qty, total_cost, total_sales))
     return '\n'.join(report)
@@ -94,14 +93,12 @@ def client_totals():
     report = ["Client Totals", " {:^30} {:^10} {:^10}".format("Client", "Cost", "Sales"), hl]
 
     total_cost, total_sales, total_qty = 0, 0, 0
-    for row in CONN.query(CLIENT_TOTALS):
+    for row in CONN.query(CLIENT_TOTALS).merge('name', normalise_alias, 'first_name', 'last_name', 'company'):
         total_cost += replace_value(row['total_cost'], 0)
         total_sales += replace_value(row['total_sales'], 0)
         total_qty += replace_value(row['total_qty'], 0)
 
-        name = normalise_alias(row['first_name'], row['last_name'], row['company'])
-
-        report.append("|{:<30}|{:>10}|{:>10}|".format(name, row['total_cost'], row['total_sales']))
+        report.append("|{:<30}|{:>10}|{:>10}|".format(row['name'], row['total_cost'], row['total_sales']))
     report.append(hl)
     report.append(" {:<30} {:>10} {:>10}".format("Total", total_cost, total_sales))
     print('\n'.join(report))
@@ -116,5 +113,5 @@ if __name__ == '__main__':
 
     # internet_solutions_mobile()
 
-    # client_totals()
+    client_totals()
     pass
