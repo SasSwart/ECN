@@ -47,4 +47,8 @@ def normalise_alias(f_name, l_name, company):
 
 
 def literal(s):
-    return '\'{}\''.format(s.strip(s[0] if s[0] in '\'\"' else ''))
+    return '\'{}\''.format(s.strip(s[0] if s[0] in '\'\"' else '')) if s else ''
+
+
+def enclose(x):
+    return '({})'.format(x)

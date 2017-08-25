@@ -20,14 +20,13 @@ def document_id():
 
 
 def journal_entry(date, journal_description, *ledgers, total=None):
+    def pack(accu, value):
+        x, y = accu
+        accu[:] = x + (value if value > 0 else 0), y + value
+        return value
+
     journal, pair = document_id(), [0, 0]
-
-    def pack(accumulator, a, b, c, d):
-        x, y = accumulator
-        accumulator[:] = x + (b if b > 0 else 0), y + b
-        return a, b, c, d
-
-    ledgers = [pack(pair, journal, value, description, account) for value, description, account in ledgers]
+    ledgers = [(journal, pack(pair, value), description, account) for value, description, account in ledgers]
 
     check, balance = pair
     is_balanced = balance == 0 if total is None else (check == total and balance == 0)
@@ -51,17 +50,20 @@ def ledger(value, description, account):
 
 
 def fetch_statement(client, reseller):
-    reseller = CONN.stmt() \
-        ('SELECT')('code', 'first_name', 'last_name', 'company', 'vat', 'physical_address', 'postal_address') \
-        ('FROM')('entity') \
+    reseller = CONN.stmt()\
+        ('SELECT')('code', 'first_name', 'last_name', 'company', 'vat', 'physical_address', 'postal_address')\
+        ('FROM')('entity')\
         ('WHERE')(o(code=literal(reseller)))()
 
-    client = CONN.stmt() \
-        ('SELECT')('code', 'first_name', 'last_name', 'company', 'vat', 'physical_address', 'postal_address') \
-        ('FROM')('entity') \
+    client = CONN.stmt()\
+        ('SELECT')('code', 'first_name', 'last_name', 'company', 'vat', 'physical_address', 'postal_address')\
+        ('FROM')('entity')\
         ('WHERE')(o(code=literal(client)))()
 
-    account = CONN.stmt()('SELECT')('owner', 'id', 'name')('FROM')('account')('WHERE')(o(owner=literal(reseller[0]['code'])))()
+    account = CONN.stmt()\
+        ('SELECT')('owner', 'id', 'name')\
+        ('FROM')('account')\
+        ('WHERE')(o(owner=literal(reseller[0]['code'])))()
     print(*account)
     # invoices = CONN.stmt()('SELECT')('id', 'date', 'value', 'description')('FROM')('journal')('WHERE')
 
@@ -69,6 +71,7 @@ def fetch_statement(client, reseller):
 def create_invoice(client, me):
     curr_invoice_nr, date = document_id(), datetime.datetime.now()
 
+    # """
     result = CONN.stmt()\
         ('SELECT')('service.code',         'service.description',
                    'cost_price',           'sales_price',
@@ -80,13 +83,23 @@ def create_invoice(client, me):
                  'service', 'service_type')\
         ('WHERE')(o('entity.code', 'service.type', 'subscription.service', 'entity.code') *
                   o('subscription.client', 'service_type.type', 'service.code', '{}'.format(literal(client))))()
+    # """
 
-    accounts = CONN.stmt()('SELECT')('id', 'name', 'owner')('FROM')('account')()
+    # """
+    accounts = CONN.stmt()\
+        ('SELECT')('id', 'name', 'owner')\
+        ('FROM')('account')()
+    # """
 
-    ledger_a = accounts.filter(o(owner=literal(client), name='\'Supplier Control\''))[0]['id']
-    ledger_b = accounts.filter(o(owner=literal(me), name='\'Customer Control\''))[0]['id']
-    ledger_c = accounts.filter(o(owner=literal(client), name='\'VAT Control\''))[0]['id']
-    ledger_d = accounts.filter(o(owner=literal(me), name='\'VAT Control\''))[0]['id']
+    """
+    ledger_a = accounts.filter(o(owner=literal(client),
+                                 name=literal('Supplier Control')))[0]['id']
+    ledger_b = accounts.filter(o(owner=literal(me),
+                                 name=literal('Customer Control')))[0]['id']
+    ledger_c = accounts.filter(o(owner=literal(client),
+                                 name=literal('VAT Control')))[0]['id']
+    ledger_d = accounts.filter(o(owner=literal(me),
+                                 name=literal('VAT Control')))[0]['id']
 
     ledgers = []
     for row in result:
@@ -97,12 +110,14 @@ def create_invoice(client, me):
                               row['description'],
                               ledger_b))
         ledgers.append(ledger(row['sales_price'] * VAT_RATE,
-                              "VAT on " + row['description'],
+                              'VAT on {}'.format(row['description']),
                               ledger_c))
         ledgers.append(ledger(row['sales_price'] * -VAT_RATE,
-                              "VAT on " + row['description'],
+                              'VAT on {}'.format(row['description']),
                               ledger_d))
+    # """
 
+    """
     if len(ledgers) > 0:
         journal = journal_entry(str(date), 'Tax Invoice Nr.{}'.format(curr_invoice_nr), *ledgers)
         if journal is not None:
@@ -114,6 +129,7 @@ def create_invoice(client, me):
             CONN.update()
             CONN.commit()
             return print_invoice(curr_invoice_nr)
+    # """
     return False
 
 
@@ -123,9 +139,21 @@ def delete_invoice(invoice_nr):
         ('FROM')('tax_invoice')\
         ('WHERE')(o(code=literal(invoice_nr)))()
     journal_nr = tax_invoice[0]['journal']
-    CONN.stmt()('DELETE')('account_line_item')('WHERE')(o(journal=literal(journal_nr)))()
-    CONN.stmt()('DELETE')('tax_invoice')('WHERE')(o(journal=literal(journal_nr)))()
-    CONN.stmt()('DELETE')('journal')('WHERE')(o(id=literal(journal_nr)))()
+
+    CONN.stmt()\
+        ('DELETE')()\
+        ('FROM')('account_line_item')\
+        ('WHERE')(o(journal=literal(journal_nr)))()
+
+    CONN.stmt()\
+        ('DELETE')()\
+        ('FROM')('tax_invoice')\
+        ('WHERE')(o(journal=literal(journal_nr)))()
+
+    CONN.stmt()\
+        ('DELETE')()\
+        ('FROM')('journal')\
+        ('WHERE')(o(id=literal(journal_nr)))()
 
 
 def fetch_invoice(invoice_nr):
@@ -267,8 +295,10 @@ def print_invoice(invoice_nr):
 
 def monthly_accounts_per_client(PRINT_ZEROES=False):
     report = []
-    result = CONN.stmt()('SELECT')('code')('FROM')('entity')()
-    for row in result.rows():
+    result = CONN.stmt()\
+        ('SELECT')('code')\
+        ('FROM')('entity')()
+    for row in result:
         invoice = create_invoice(row['code'], "ecn001")
         if invoice[1] > 0 or PRINT_ZEROES:
             report.append(invoice[0])
@@ -276,4 +306,6 @@ def monthly_accounts_per_client(PRINT_ZEROES=False):
 
 
 if __name__ == '__main__':
+    # monthly_accounts_per_client()
     print(create_invoice('gre003', 'ecn001'))
+    pass

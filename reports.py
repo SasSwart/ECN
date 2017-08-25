@@ -40,13 +40,13 @@ CLIENT_TOTALS = ("SELECT\n"
                  "GROUP BY entity.code;")
 
 
-def default_report(title, where):
+def default_report(title, where, order=(False, 'qty', 'sales_price')):
     hl = '-' * 89
     report = [title, '{:^30} {:^3} {:^10} {:^10} {:^30}'.format('Description', 'Qty', 'Cost', 'Sales', 'Client'), hl]
 
     row_str = '|{:<30}|{:^3}|{:>10}|{:>10}|{:>30}|'
     total_cost, total_sales, total_qty = 0, 0, 0
-    for row in CONN.query(DEFAULT_REPORT).filter(where):
+    for row in CONN.query(DEFAULT_REPORT).filter(where).order_by(*order):
         cost_price = row['cost_price'] * row['qty']
         sales_price = row['sales_price'] * row['qty']
 
@@ -79,7 +79,6 @@ def internet_solution_adsl():
                          o(type=(literal('peracc'), literal('uncapped')),
                            supplier=literal('is0001'))))
     print()
-
     print(default_report('IS Per GB Reconciliation',
                          o(type=literal('pergb'),
                            supplier=literal('is0001'))))
@@ -115,13 +114,7 @@ if __name__ == '__main__':
 
     # internet_solutions_domain()
 
-    internet_solutions_mobile()
+    # internet_solutions_mobile()
 
     # client_totals()
     pass
-
-
-# title = input("Report Title:\t")
-# supplier = input("Supplier Code:\t")
-# type = replace_value(input("Service Type:\t"), None, "")
-# print(default_report(title, o(supplier=supplier, type=type)))

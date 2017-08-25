@@ -1,48 +1,78 @@
 
 
-def factory(func_map, ctrl_map, stack, pipe):
-    def exchange(current=None):
-        def controller(key=None, exit=True):
-            def execute(*args):
-                stack.append(func_map[key](*args))
+def factory(func_map=None, ctrl_map=None, stack=None, pipe=None):
+    def exchange(state=None):
+        def controller(key=None, halt=None, *args, **kwargs):
+            def execute(*_args, **_kwargs):
+                stack.append(func_map[key](*_args, **_kwargs))
                 return exchange(key)
 
             if key is None:
-                terminal = pipe(stack, exit)
+                temp = stack[:]
                 stack.clear()
-                return terminal
-            if current is None or key in ctrl_map[current]:
+
+                if pipe is None:
+                    return temp
+                if pipe.__code__.co_code == factory.__code__.co_code:
+                    return pipe(func_map, ctrl_map, temp, pipe if halt is None else halt)
+                return pipe(temp, *args, **kwargs)
+            if state is None or key in ctrl_map[state]:
                 return execute
             raise ValueError('\'{}\' has no access to \'{}\' '
-                             'in its flow-graph, please try: {}'.format(current, key, ctrl_map[current]))
+                             'in its state-graph, please try: {}'.format(state, key, ctrl_map[state]))
         return controller
-    return exchange
-
+    return exchange()
 
 """
-class ControlledFactory(dict):
-    def __init__(self, states):
-        super(ControlledFactory, self).__init__(**states)
+def factory(func_map=None, ctrl_map=None):
+    def build(stack=None, pipe=None):
+        stack = [] if None else stack[:]
 
-        self._current = None
-        self._flwctrl = defaultdict(str)
+        def exchange(state=None):
+            def controller(key=None, halt=None, *args, **kwargs):
+                def execute(*_args, **_kwargs):
+                    stack.append(func_map[key](*_args, **_kwargs))
+                    return exchange(key)
 
-    def __getitem__(self, key):
-        if self._current is None:
-            self._current = key
-            return super(ControlledFactory, self).__getitem__(key)
-        if key in self._flwctrl[self._current]:
-            self._current = key
-            return super(ControlledFactory, self).__getitem__(key)
-        raise ValueError('{} has no access to {} '
-                         'in its flow-graph, please try: {}'.format(self._current, key, self._flwctrl[self._current]))
-
-    def __setitem__(self, key, val):
-        self._flwctrl[key] = val
-
-    def reset(self):
-        self._current = None
-
-    def get_control(self, key):
-        return self._flwctrl[key]
+                print(key)
+                if key is None:
+                    if pipe is None:
+                        return stack
+                    if pipe.__code__.co_code == factory.__code__.co_code:
+                        return build(stack, pipe if halt is None else halt)
+                    return pipe(stack, *args, **kwargs)
+                if state is None or key in ctrl_map[state]:
+                    return execute
+                raise ValueError('\'{}\' has no access to \'{}\' '
+                                 'in its state-graph, please try: {}'.format(state, key, ctrl_map[state]))
+            return controller
+        return exchange()
+    return build
 """
+
+
+if __name__ == '__main__':
+    def to_str(stack):
+        return ', '.join(stack) + '!'
+
+    f_map = {
+        '1': lambda x: '1 x {}'.format(x),
+        '2': lambda x: '2 x {}'.format(x),
+        '3': lambda x: '3 x {}'.format(x),
+        '4': lambda x: '4 x {}'.format(x),
+        '5': lambda x: '5 x {}'.format(x),
+        '6': lambda x: '6 x {}'.format(x),
+    }
+
+    c_map = {
+        '1': '2',
+        '2': '3',
+        '3': '4',
+        '4': '5',
+        '5': '6',
+        '6': 'NONE'
+    }
+
+    process_a = factory(f_map, c_map, [], factory)
+
+    print(process_a('3')('bears')('4')('moose')()('1')('tick')(halt=to_str)())

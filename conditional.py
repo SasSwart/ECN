@@ -1,5 +1,5 @@
 
-from defaults import multi_replace, multi_reformat
+from defaults import multi_replace, multi_reformat, literal, enclose
 
 
 BACKEND_FORMAT = ('(\$)(?P<var>[a-zA-Z]+)',
@@ -35,18 +35,15 @@ AS_PYE = (PYE_FORMATTER, PYE_REPLACEMENTS)
 def o(*args, **kwargs):
     l_args, l_kwargs = len(args), len(kwargs)
     assert l_args + l_kwargs == max(l_args, l_kwargs), ('simultaneous anonymous and aliased'
-                                                        'assignment not implemented')
+                                                        'assignment not currently supported')
 
     if kwargs:
-        args = _close(' and '.join(
-            _close(' or '.join(_relate(k, i) for i in v)) if isinstance(v, tuple) else _relate(k, v)
+        args = enclose(' and '.join(
+            enclose(' or '.join(
+                _relate(k, i) for i in v)) if isinstance(v, tuple) else _relate(k, v)
             for k, v in kwargs.items() if v is not None))
         return _ConditionalClause(args)
     return _ConditionalClause(*args)
-
-
-def _close(x):
-    return '({})'.format(x)
 
 
 def _relate(a, b, relation='EQ'):
@@ -78,22 +75,32 @@ class _ConditionalClause(object):
 
     def __or__(self, other):
         if isinstance(other, _ConditionalClause):
-            return o(_close(' OR '.join(self.expr + other.expr)))
+            return o(enclose(' OR '.join(self.expr + other.expr)))
         return
 
     def __and__(self, other):
         if isinstance(other, _ConditionalClause):
-            return o(_close(' AND '.join(self.expr + other.expr)))
+            return o(enclose(' AND '.join(self.expr + other.expr)))
+        return
+
+    def __add__(self, other):
+        if isinstance(other, _ConditionalClause):
+            return o(enclose(' OR '.join(_relate(a, b, 'EQ') for a, b in zip(self.expr, other.expr))))
+        return
+
+    def __sub__(self, other):
+        if isinstance(other, _ConditionalClause):
+            return o(enclose(' OR '.join(_relate(a, b, 'NE') for a, b in zip(self.expr, other.expr))))
         return
 
     def __mul__(self, other):
         if isinstance(other, _ConditionalClause):
-            return o(_close(' AND '.join(_relate(a, b, 'EQ') for a, b in zip(self.expr, other.expr))))
+            return o(enclose(' AND '.join(_relate(a, b, 'EQ') for a, b in zip(self.expr, other.expr))))
         return
 
     def __truediv__(self, other):
         if isinstance(other, _ConditionalClause):
-            return o(_close(' AND '.join(_relate(a, b, 'NE') for a, b in zip(self.expr, other.expr))))
+            return o(enclose(' AND '.join(_relate(a, b, 'NE') for a, b in zip(self.expr, other.expr))))
         return
 
     # BINARY RELATIONS
@@ -129,5 +136,5 @@ class _ConditionalClause(object):
 
 
 if __name__ == '__main__':
-    z = o('a', 'b', 'c') * o(1, 2, 3) & o(hello='goodbye')
+    z = o('a', 'b', 'c') * o(1, 2, 3) | o(hello=literal("goodbye"))
     print(z.x(AS_PYE))
