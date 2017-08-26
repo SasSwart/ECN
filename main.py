@@ -2,7 +2,7 @@ import sys
 
 from PyQt5.QtWidgets import QApplication
 
-from gui.root import Root
+from view.root import Root
 
 # class TextDocumentTab(QTextEdit):
 #     def __init__(self, text="No Text Body Provided"):
@@ -113,5 +113,6 @@ if __name__ == '__main__':
     app = QApplication(sys.argv)
 
     main = Root()
+    main.manage_subscriptions()
     main.showMaximized()
     sys.exit(app.exec())
