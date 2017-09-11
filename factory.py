@@ -11,7 +11,6 @@ class Factory(object):
 
         self._context = {
             'BIND': self._bind,
-            'NAME': self._name,
             'PIPE': self._pipe,
             'LOAD': self._load,
             'DUMP': self._dump,
@@ -59,17 +58,6 @@ class Factory(object):
             return func
 
         return bound
-
-    def _name(self, old_name, new_name):
-        try:
-            self._expect('NAME')
-        except AssertionError as error:
-            self.logs.append(error)
-
-        self._context[new_name] = self._context.pop(old_name)
-        self._call_as = 'PIPE'
-
-        return self
 
     def _pipe(self, procedure):
         try:
@@ -143,13 +131,24 @@ if __name__ == '__main__':
     def want_to(verb, adverb):
         return 'I want to {} {}.'.format(verb, adverb)
 
-    factory.start()
+    delattr(need_to, 'predicate')
+    delattr(want_to, 'predicate')
+
+    factory.call_as('PIPE')
     factory('like_to')('dance', 'idiotically')
-    factory('hate_to')('trudge', 'logically')
+    factory('hate_to')('trudge', 'stoically')
     factory('need_to')('frolic', 'manically')
     factory('want_to')('sleep', 'peacefully')
 
-    print('path:', factory.path)
-    print('loci:', factory.loci)
-    print('logs:', factory.logs)
-    print('dump:', factory.dump)
+    print('\npath:')
+    for e in factory.path:
+        print('-', e)
+    print('\nloci:')
+    for e in factory.loci:
+        print('-', e)
+    print('\nlogs:')
+    for e in factory.logs:
+        print('-', e)
+    print('\ndump:')
+    for e in factory.dump:
+        print('-', *e)
