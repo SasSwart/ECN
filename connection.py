@@ -1,6 +1,7 @@
+
 import decimal
 
-from conditional import AS_SQL, AS_PYE
+from conditional import AS_SQL, AS_PYE, o
 from factory import Factory
 from datetime import datetime
 from operator import itemgetter
@@ -12,7 +13,7 @@ from defaults import U_NAME, P_WORD, H_NAME, DB_NAME, multi_replace
 
 class _SQLAssembler(Factory):
     def __init__(self, conn):
-        super(_SQLAssembler, self).__init__(';')
+        super(_SQLAssembler, self).__init__(eof_object=';')
         self.conn = conn
         self.bin = []
 
@@ -32,7 +33,7 @@ def _sql_assembler(conn):
 
     def _raise(x, funcs):
         if x.path[-1] not in funcs:
-            raise SyntaxError('expected preceding {}, received {}'.format(' | '.join(funcs), x.path[-1]))
+            raise SyntaxError('expected preceding {}, found {}'.format(' | '.join(funcs), x.path[-1]))
 
     @assembler(lambda x: _raise(x, ['START']), 'SELECT')
     def select_(*attributes):
@@ -82,7 +83,6 @@ def _sql_assembler(conn):
     def values_(*values):
         assembler.bin.extend(values)
 
-    assembler.start()
     return assembler
 
 
@@ -147,7 +147,7 @@ class Connection(object):
         self._to_execute = defaultdict(list)
 
     def stmt(self):
-        return self._prepared_stmt
+        return self._prepared_stmt.call_as('PIPE')
 
     def commit(self):
         self._conn.commit()
@@ -188,11 +188,21 @@ CONN = Connection(username=U_NAME,
                   db_name=DB_NAME)
 
 if __name__ == '__main__':
-    thing = CONN.stmt() \
-        ('SELECT')('name', 'service') \
-        ('FROM')('clients')
+    thing = CONN.stmt()\
+                     ('SELECT')('name', 'service')\
+                     ('FROM')('clients')\
+                     ('WHERE')(o(name='John'))(';')()
 
-    print('path:', thing.path)
-    print('loci:', thing.loci)
-    print('logs:', thing.logs)
-    print('dump:', thing.dump)
+    print('\n$', thing)
+    print('\npath:')
+    for e in CONN.stmt().path:
+        print('-', e)
+    print('\nloci:')
+    for e in CONN.stmt().loci:
+        print('-', e)
+    print('\nlogs:')
+    for e in CONN.stmt().logs:
+        print('-', e)
+    print('\ndump:')
+    for e in CONN.stmt().dump:
+        print('-', *e)

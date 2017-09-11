@@ -2,10 +2,10 @@
 
 class Factory(object):
     def __init__(self, eof_object='HALT'):
-        self.path = []  # sequential record of called procedures
-        self.loci = []  # sequential record of results of procedure calls
-        self.dump = []  # sequential record of provided but unused arguments
-        self.logs = []  # sequential record of errors raised by illegal calls
+        self.path = ['START']  # sequential record of called procedures
+        self.loci = []         # sequential record of results of procedure calls
+        self.dump = []         # sequential record of provided but unused arguments
+        self.logs = []         # sequential record of errors raised by illegal calls
 
         self.eof_object = eof_object
 
@@ -26,10 +26,13 @@ class Factory(object):
 
     def call_as(self, desired):
         self._call_as = desired
+        return self
 
-    def start(self):
-        self._call_as = 'PIPE'
-        self.path.append('START')
+    def clear(self):
+        self.path = ['START']
+        self.loci.clear()
+        self.dump.clear()
+        self.logs.clear()
 
     def halt(self, *args, **kwargs):
         raise NotImplementedError
