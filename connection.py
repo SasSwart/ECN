@@ -1,108 +1,89 @@
 import decimal
 
 from conditional import AS_SQL, AS_PYE
-from factory import factory
+from factory import Factory
 from datetime import datetime
-from operator import itemgetter, getitem, setitem
+from operator import itemgetter
 from itertools import filterfalse
 from mysql import connector
+from collections import defaultdict
 from defaults import U_NAME, P_WORD, H_NAME, DB_NAME, multi_replace
 
 
-def _result(conn, column_names, values, type_norm):
-    return _ResultSet(conn,
-                      [list(map(type_norm, row)) for row in values],
-                      {name: index for index, name in enumerate(column_names)})
-
-
-class _PreparedStatement(object):
+class _SQLAssembler(Factory):
     def __init__(self, conn):
-        self._conn = conn
-        self._bin = None
-        self._build()
+        super(_SQLAssembler, self).__init__(';')
+        self.conn = conn
+        self.bin = []
 
-    def _build(self):
-        def select_(*attributes):
-            clause = 'SELECT columns'
-            return clause.replace('columns', '{}').format(', '.join(attributes))
+    def halt(self, execute=False):
+        stmt = ' '.join(self.loci) + ';'
+        if execute:
+            if self.bin is None:
+                return self.conn.query(stmt)
+            else:
+                data, self.bin = self.bin, None
+                return self.conn.query(stmt, data)
+        return stmt
 
-        def delete_(*attributes):
-            clause = 'DELETE columns'
-            return clause.replace('columns', '{}').format(', '.join(attributes) if attributes else '\b')
 
-        def from_(*tables):
-            clause = 'FROM table_names'
-            f_str = '{}.{}'.format(self._conn.db_name, '{}')
-            return clause.replace('table_names', '({})').format(', '.join(f_str.format(x) for x in tables))
+def _sql_assembler(conn):
+    assembler = _SQLAssembler(conn)
 
-        def where_(condition):
-            clause = 'WHERE condition'
-            return clause.replace('condition', '{}').format(condition.x(AS_SQL))
+    def _raise(x, funcs):
+        if x.path[-1] not in funcs:
+            raise SyntaxError('expected preceding {}, received {}'.format(' | '.join(funcs), x.path[-1]))
 
-        def group_by_(*pivots):
-            clause = multi_replace('GROUP BY (column1 , column2, ...) ASC|DESC',
-                                   {'(column1, column2, ...)': '({})',
-                                    'ASC|DESC': ''})
-            return clause.format(', '.join(['{} {}'.format(attribute, direction)
-                                            for attribute, direction in zip(pivots[::2], pivots[1::2])]))
+    @assembler(lambda x: _raise(x, ['START']), 'SELECT')
+    def select_(*attributes):
+        clause = 'SELECT columns'
+        return clause.replace('columns', '{}').format(', '.join(attributes))
 
-        def order_by_(*pivots):
-            clause = multi_replace('ORDER BY (column1 , column2, ...) ASC|DESC',
-                                   {'(column1, column2, ...)': '({})',
-                                    'ASC|DESC': ''})
-            return clause.format(', '.join(['{} {}'.format(attribute, direction)
-                                            for attribute, direction in zip(pivots[::2], pivots[1::2])]))
+    @assembler(lambda x: _raise(x, ['START']), 'DELETE')
+    def delete_(*attributes):
+        clause = 'DELETE columns'
+        return clause.replace('columns', '{}').format(', '.join(attributes) if attributes else '\b')
 
-        def insert_into_(table):
-            clause = 'INSERT INTO table_name'
-            return clause.replace('table_name', '{}.{}').format(self._conn.db_name, table)
+    @assembler(lambda x: _raise(x, ['SELECT', 'DELETE']), 'FROM')
+    def from_(*tables):
+        clause, table_name_format = 'FROM table_names', '{}.{}'.format(conn.db_name, '{}')
+        return clause.replace('table_names', '({})').format(', '.join(table_name_format.format(x) for x in tables))
 
-        def columns_(*attributes):
-            clause = '(column1, column2, ...)'
-            return clause.replace('(column1, column2, ...)', '({})').format(', '.join(attributes))
+    @assembler(lambda x: _raise(x, ['FROM']), 'WHERE')
+    def where_(condition):
+        clause = 'WHERE condition'
+        return clause.replace('condition', '{}').format(condition.x(AS_SQL))
 
-        def values_(*values):
-            self._bin = values
-            return ''
+    @assembler(lambda x: _raise(x, ['FROM', 'WHERE']), 'GROUP_BY')
+    def group_by_(*pivots):
+        clause = multi_replace('GROUP BY (column1, column2, ...) ASC|DESC',
+                               {'(column1, column2, ...)': '({})', 'ASC|DESC': ''})
+        pairs = [(pivots[i], pivots[i + 1]) for i in range(len(pivots))]
+        return clause.format(', '.join(['{} {}'.format(attribute, direction) for attribute, direction in pairs]))
 
-        def end_(stack, execute=True):
-            stmt = ' '.join(stack) + ';'
-            if execute:
-                if self._bin is None:
-                    return self._conn.query(stmt)
-                data, self._bin = self._bin, None
-                return self._conn.query(stmt, data)
-            return stmt
+    @assembler(lambda x: _raise(x, ['FROM', 'WHERE']), 'ORDER_BY')
+    def order_by_(*pivots):
+        clause = multi_replace('ORDER BY (column1, column2, ...) ASC|DESC',
+                               {'(column1, column2, ...)': '({})', 'ASC|DESC': ''})
+        pairs = [(pivots[i], pivots[i + 1]) for i in range(len(pivots))]
+        return clause.format(', '.join(['{} {}'.format(attribute, direction) for attribute, direction in pairs]))
 
-        func_map = {
-            'SELECT': select_,
-            'DELETE': delete_,
-            'FROM': from_,
-            'WHERE': where_,
-            'GROUP_BY': group_by_,
-            'ORDER_BY': order_by_,
+    @assembler(lambda x: _raise(x, ['START']), 'INSERT_INTO')
+    def insert_into_(table):
+        clause = 'INSERT INTO table_name'
+        return clause.replace('table_name', '{}.{}').format(conn.db_name, table)
 
-            'INSERT_INTO': insert_into_,
-            'COLUMNS': columns_,
-            'VALUES': values_
-        }
-        ctrl_map = {
-            'SELECT': 'FROM',
-            'DELETE': 'FROM',
-            'FROM': 'WHERE | GROUP_BY | ORDER_BY | NONE',
-            'WHERE': 'GROUP_BY | ORDER_BY | NONE',
-            'GROUP_BY': 'ORDER_BY | NONE',
-            'ORDER_BY': 'NONE',
+    @assembler(lambda x: _raise(x, ['INSERT_INTO']), 'COLUMNS')
+    def columns_(*attributes):
+        clause = '(column1, column2, ...)'
+        return clause.replace('(column1, column2, ...)', '({})').format(', '.join(attributes))
 
-            'INSERT_INTO': 'COLUMNS',
-            'COLUMNS': 'VALUES',
-            'VALUES': 'NONE'
-        }
+    @assembler(lambda x: _raise(x, ['COLUMNS']), 'VALUES', False)
+    def values_(*values):
+        assembler.bin.extend(values)
 
-        self._factory = factory(func_map, ctrl_map, [], end_)
-
-    def start(self):
-        return self._factory
+    assembler.start()
+    return assembler
 
 
 class _ResultSet(object):
@@ -155,13 +136,18 @@ class _ResultSet(object):
 class Connection(object):
     def __init__(self, username, password, hostname, db_name):
         self.db_name = db_name
-        self._conn = connector.connect(user=username, password=password, host=hostname)
+
+        self._conn = connector.connect(user=username,
+                                       password=password,
+                                       host=hostname)
         self._cursor = self._conn.cursor()
-        self._prepared_stmt = _PreparedStatement(self)
-        self._to_execute = []
+
+        self._prepared_stmt = _sql_assembler(self)
+
+        self._to_execute = defaultdict(list)
 
     def stmt(self):
-        return self._prepared_stmt.start()
+        return self._prepared_stmt
 
     def commit(self):
         self._conn.commit()
@@ -170,7 +156,7 @@ class Connection(object):
         self._to_execute.clear()
 
     def update(self):
-        row_ids = [self.rep_query(stmt, values) for stmt, values in self._to_execute]
+        row_ids = [self.rep_query(stmt, values) for stmt, values in self._to_execute.items()]
         self.clear()
         return row_ids
 
@@ -185,12 +171,14 @@ class Connection(object):
             return x
         if values is None:
             self._cursor.execute(stmt)
-            return _result(self, self._cursor.column_names, self._cursor.fetchall(), type_norm)
-        self._to_execute.append((stmt, [values]))
-        return None
+            return _ResultSet(self,
+                              [list(map(type_norm, row)) for row in self._cursor.fetchall()],
+                              {name: index for index, name in enumerate(self._cursor.column_names)})
+        self._to_execute[stmt].extend(values)
 
     def rep_query(self, stmt, values):
-        self._cursor.executemany('{} VALUES ({});'.format(stmt, ', '.join(['%s'] * len(values[0]))), values)
+        stmt = '{} VALUES ({});'.format(stmt, ', '.join(['%s'] * len(values)))
+        self._cursor.executemany(stmt, values)
         return self._cursor.getlastrowid()
 
 
@@ -200,8 +188,11 @@ CONN = Connection(username=U_NAME,
                   db_name=DB_NAME)
 
 if __name__ == '__main__':
-    for r in CONN.stmt()\
-                ('SELECT')('*')\
-                ('FROM')('subscription')\
-                ().merge('_', ('{}_' * 3).format, 'client', 'code', 'service'):
-        print(r)
+    thing = CONN.stmt() \
+        ('SELECT')('name', 'service') \
+        ('FROM')('clients')
+
+    print('path:', thing.path)
+    print('loci:', thing.loci)
+    print('logs:', thing.logs)
+    print('dump:', thing.dump)

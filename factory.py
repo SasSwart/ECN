@@ -1,78 +1,152 @@
 
 
-def factory(func_map=None, ctrl_map=None, stack=None, pipe=None):
-    def exchange(state=None):
-        def controller(key=None, halt=None, *args, **kwargs):
-            def execute(*_args, **_kwargs):
-                stack.append(func_map[key](*_args, **_kwargs))
-                return exchange(key)
+class Factory(object):
+    def __init__(self, eof_object='HALT'):
+        self.path = []  # sequential record of called procedures
+        self.loci = []  # sequential record of results of procedure calls
+        self.dump = []  # sequential record of provided but unused arguments
+        self.logs = []  # sequential record of errors raised by illegal calls
 
-            if key is None:
-                temp = stack[:]
-                stack.clear()
+        self.eof_object = eof_object
 
-                if pipe is None:
-                    return temp
-                if pipe.__code__.co_code == factory.__code__.co_code:
-                    return pipe(func_map, ctrl_map, temp, pipe if halt is None else halt)
-                return pipe(temp, *args, **kwargs)
-            if state is None or key in ctrl_map[state]:
-                return execute
-            raise ValueError('\'{}\' has no access to \'{}\' '
-                             'in its state-graph, please try: {}'.format(state, key, ctrl_map[state]))
-        return controller
-    return exchange()
+        self._context = {
+            'BIND': self._bind,
+            'NAME': self._name,
+            'PIPE': self._pipe,
+            'LOAD': self._load,
+            'DUMP': self._dump,
+            'HALT': self.halt
+        }
+        self.reserved = self._context.keys()
 
-"""
-def factory(func_map=None, ctrl_map=None):
-    def build(stack=None, pipe=None):
-        stack = [] if None else stack[:]
+        self._call_as = 'BIND'
 
-        def exchange(state=None):
-            def controller(key=None, halt=None, *args, **kwargs):
-                def execute(*_args, **_kwargs):
-                    stack.append(func_map[key](*_args, **_kwargs))
-                    return exchange(key)
+    def __call__(self, *args, **kwargs):
+        return self._context[self._call_as](*args, **kwargs)
 
-                print(key)
-                if key is None:
-                    if pipe is None:
-                        return stack
-                    if pipe.__code__.co_code == factory.__code__.co_code:
-                        return build(stack, pipe if halt is None else halt)
-                    return pipe(stack, *args, **kwargs)
-                if state is None or key in ctrl_map[state]:
-                    return execute
-                raise ValueError('\'{}\' has no access to \'{}\' '
-                                 'in its state-graph, please try: {}'.format(state, key, ctrl_map[state]))
-            return controller
-        return exchange()
-    return build
-"""
+    def call_as(self, desired):
+        self._call_as = desired
 
+    def start(self):
+        self._call_as = 'PIPE'
+        self.path.append('START')
+
+    def halt(self, *args, **kwargs):
+        raise NotImplementedError
+
+    def _expect(self, state):
+        assert self._call_as == state, 'current state is {}, not \'{}\''.format(self._call_as, state)
+
+    def _bind(self, predicate, alias=None, is_function=True):
+        try:
+            self._expect('BIND')
+        except AssertionError as error:
+            self.logs.append(error)
+
+        def bound(func):
+            func.predicate = predicate
+            func.is_function = is_function
+
+            name = func.__name__ if alias is None else alias
+            if name not in self.reserved:
+                self._context[func.__name__ if alias is None else alias] = func
+            else:
+                raise NameError('\'{}\' is a reserved factory function, please change the alias.'.format(name))
+
+            return func
+
+        return bound
+
+    def _name(self, old_name, new_name):
+        try:
+            self._expect('NAME')
+        except AssertionError as error:
+            self.logs.append(error)
+
+        self._context[new_name] = self._context.pop(old_name)
+        self._call_as = 'PIPE'
+
+        return self
+
+    def _pipe(self, procedure):
+        try:
+            self._expect('PIPE')
+        except AssertionError as error:
+            self.logs.append(error)
+
+        if procedure == self.eof_object:
+            return self.halt
+        try:
+            getattr(self._context[procedure], 'predicate')(self)
+            self.path.append(procedure)
+            self._call_as = 'LOAD'
+        except AttributeError:
+            self.logs.append(AttributeError('\'{}\' has no defined predicate.'.format(procedure)))
+            self._call_as = 'DUMP'
+        except KeyError:
+            self.logs.append(AttributeError('\'{}\' is not defined within the factory.'.format(procedure)))
+            self._call_as = 'DUMP'
+        except SyntaxError as error:
+            self.logs.append(error)
+            self._call_as = 'DUMP'
+
+        return self
+
+    def _load(self, *args, **kwargs):
+        try:
+            self._expect('LOAD')
+        except AssertionError as error:
+            self.logs.append(error)
+
+        piped = self._context[self.path[-1]]
+        if getattr(piped, 'is_function'):
+            self.loci.append(piped(*args, **kwargs))
+        else:
+            piped(*args, **kwargs)
+        self._call_as = 'PIPE'
+
+        return self
+
+    def _dump(self, *args, **kwargs):
+        try:
+            self._expect('DUMP')
+        except AssertionError as error:
+            self.logs.append(error)
+
+        self.dump.append((args, kwargs))
+        self._call_as = 'PIPE'
+
+        return self
 
 if __name__ == '__main__':
-    def to_str(stack):
-        return ', '.join(stack) + '!'
+    factory = Factory()
 
-    f_map = {
-        '1': lambda x: '1 x {}'.format(x),
-        '2': lambda x: '2 x {}'.format(x),
-        '3': lambda x: '3 x {}'.format(x),
-        '4': lambda x: '4 x {}'.format(x),
-        '5': lambda x: '5 x {}'.format(x),
-        '6': lambda x: '6 x {}'.format(x),
-    }
+    def _raise(message):
+        raise SyntaxError(message)
 
-    c_map = {
-        '1': '2',
-        '2': '3',
-        '3': '4',
-        '4': '5',
-        '5': '6',
-        '6': 'NONE'
-    }
+    @factory(lambda x: True if x.path[-1] == 'START' else _raise('\'START\' must precede \'like_to\'.'))
+    def like_to(verb, adverb):
+        return 'I like to {} {}.'.format(verb, adverb)
 
-    process_a = factory(f_map, c_map, [], factory)
+    @factory(lambda x: True if x.path[-1] == 'like_to' else _raise('\'like_to\' must precede \'hate_to\'.'))
+    def hate_to(verb, adverb):
+        return 'I hate to {} {}.'.format(verb, adverb)
 
-    print(process_a('3')('bears')('4')('moose')()('1')('tick')(halt=to_str)())
+    @factory(lambda x: True if x.path[-1] == 'hate_to' else _raise('\'hate_to\' must precede \'need_to\'.'))
+    def need_to(verb, adverb):
+        return 'I need to {} {}.'.format(verb, adverb)
+
+    @factory(lambda x: True if x.path[-1] == 'need_to' else _raise('\'need_to\' must precede \'want_to\'.'))
+    def want_to(verb, adverb):
+        return 'I want to {} {}.'.format(verb, adverb)
+
+    factory.start()
+    factory('like_to')('dance', 'idiotically')
+    factory('hate_to')('trudge', 'logically')
+    factory('need_to')('frolic', 'manically')
+    factory('want_to')('sleep', 'peacefully')
+
+    print('path:', factory.path)
+    print('loci:', factory.loci)
+    print('logs:', factory.logs)
+    print('dump:', factory.dump)
