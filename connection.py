@@ -1,108 +1,88 @@
+
 import decimal
 
-from conditional import AS_SQL, AS_PYE
-from factory import factory
+from conditional import AS_SQL, AS_PYE, o
+from factory import Factory
 from datetime import datetime
-from operator import itemgetter, getitem, setitem
+from operator import itemgetter
 from itertools import filterfalse
 from mysql import connector
+from collections import defaultdict
 from defaults import U_NAME, P_WORD, H_NAME, DB_NAME, multi_replace
 
 
-def _result(conn, column_names, values, type_norm):
-    return _ResultSet(conn,
-                      [list(map(type_norm, row)) for row in values],
-                      {name: index for index, name in enumerate(column_names)})
-
-
-class _PreparedStatement(object):
+class _SQLAssembler(Factory):
     def __init__(self, conn):
-        self._conn = conn
-        self._bin = None
+        super(_SQLAssembler, self).__init__(eof_object=';')
+        self.conn = conn
+        self.bin = []
+
         self._build()
 
+    def halt(self, execute=False):
+        stmt = ' '.join(self.loci) + ';'
+        if execute:
+            if self.bin is None:
+                return self.conn.query(stmt)
+            else:
+                data, self.bin = self.bin, None
+                return self.conn.query(stmt, data)
+        return stmt
+
     def _build(self):
+        def raise_(funcs):
+            def evaluate(x):
+                if x.path[-1] not in funcs:
+                    raise SyntaxError('expected preceding {}, found {}'.format(' | '.join(funcs), x.path[-1]))
+            return evaluate
+
+        @self(raise_(['START']), 'SELECT')
         def select_(*attributes):
             clause = 'SELECT columns'
             return clause.replace('columns', '{}').format(', '.join(attributes))
 
+        @self(raise_(['START']), 'DELETE')
         def delete_(*attributes):
             clause = 'DELETE columns'
             return clause.replace('columns', '{}').format(', '.join(attributes) if attributes else '\b')
 
+        @self(raise_(['SELECT', 'DELETE']), 'FROM')
         def from_(*tables):
-            clause = 'FROM table_names'
-            f_str = '{}.{}'.format(self._conn.db_name, '{}')
-            return clause.replace('table_names', '({})').format(', '.join(f_str.format(x) for x in tables))
+            clause, table_name_format = 'FROM table_names', '{}.{}'.format(self.conn.db_name, '{}')
+            return clause.replace('table_names', '({})').format(', '.join(table_name_format.format(x) for x in tables))
 
+        @self(raise_(['FROM']), 'WHERE')
         def where_(condition):
             clause = 'WHERE condition'
             return clause.replace('condition', '{}').format(condition.x(AS_SQL))
 
+        @self(raise_(['FROM', 'WHERE']), 'GROUP_BY')
         def group_by_(*pivots):
-            clause = multi_replace('GROUP BY (column1 , column2, ...) ASC|DESC',
-                                   {'(column1, column2, ...)': '({})',
-                                    'ASC|DESC': ''})
-            return clause.format(', '.join(['{} {}'.format(attribute, direction)
-                                            for attribute, direction in zip(pivots[::2], pivots[1::2])]))
+            clause = multi_replace('GROUP BY (column1, column2, ...) ASC|DESC',
+                                   {'(column1, column2, ...)': '({})', 'ASC|DESC': ''})
+            pairs = [(pivots[i], pivots[i + 1]) for i in range(len(pivots))]
+            return clause.format(', '.join(['{} {}'.format(attribute, direction) for attribute, direction in pairs]))
 
+        @self(raise_(['FROM', 'WHERE']), 'ORDER_BY')
         def order_by_(*pivots):
-            clause = multi_replace('ORDER BY (column1 , column2, ...) ASC|DESC',
-                                   {'(column1, column2, ...)': '({})',
-                                    'ASC|DESC': ''})
-            return clause.format(', '.join(['{} {}'.format(attribute, direction)
-                                            for attribute, direction in zip(pivots[::2], pivots[1::2])]))
+            clause = multi_replace('ORDER BY (column1, column2, ...) ASC|DESC',
+                                   {'(column1, column2, ...)': '({})', 'ASC|DESC': ''})
+            pairs = [(pivots[i], pivots[i + 1]) for i in range(len(pivots))]
+            return clause.format(', '.join(['{} {}'.format(attribute, direction) for attribute, direction in pairs]))
 
+        @self(raise_(['START']), 'INSERT_INTO')
         def insert_into_(table):
             clause = 'INSERT INTO table_name'
-            return clause.replace('table_name', '{}.{}').format(self._conn.db_name, table)
+            return clause.replace('table_name', '{}.{}').format(self.conn.db_name, table)
 
+        @self(raise_(['INSERT_INTO']), 'COLUMNS')
         def columns_(*attributes):
             clause = '(column1, column2, ...)'
             return clause.replace('(column1, column2, ...)', '({})').format(', '.join(attributes))
 
+        @self(raise_(['COLUMNS']), 'VALUES', False)
         def values_(*values):
-            self._bin = values
-            return ''
-
-        def end_(stack, execute=True):
-            stmt = ' '.join(stack) + ';'
-            if execute:
-                if self._bin is None:
-                    return self._conn.query(stmt)
-                data, self._bin = self._bin, None
-                return self._conn.query(stmt, data)
-            return stmt
-
-        func_map = {
-            'SELECT': select_,
-            'DELETE': delete_,
-            'FROM': from_,
-            'WHERE': where_,
-            'GROUP_BY': group_by_,
-            'ORDER_BY': order_by_,
-
-            'INSERT_INTO': insert_into_,
-            'COLUMNS': columns_,
-            'VALUES': values_
-        }
-        ctrl_map = {
-            'SELECT': 'FROM',
-            'DELETE': 'FROM',
-            'FROM': 'WHERE | GROUP_BY | ORDER_BY | NONE',
-            'WHERE': 'GROUP_BY | ORDER_BY | NONE',
-            'GROUP_BY': 'ORDER_BY | NONE',
-            'ORDER_BY': 'NONE',
-
-            'INSERT_INTO': 'COLUMNS',
-            'COLUMNS': 'VALUES',
-            'VALUES': 'NONE'
-        }
-
-        self._factory = factory(func_map, ctrl_map, [], end_)
-
-    def start(self):
-        return self._factory
+            self.bin.extend(values)
 
 
 class _ResultSet(object):
@@ -155,13 +135,18 @@ class _ResultSet(object):
 class Connection(object):
     def __init__(self, username, password, hostname, db_name):
         self.db_name = db_name
-        self._conn = connector.connect(user=username, password=password, host=hostname)
+
+        self._conn = connector.connect(user=username,
+                                       password=password,
+                                       host=hostname)
         self._cursor = self._conn.cursor()
-        self._prepared_stmt = _PreparedStatement(self)
-        self._to_execute = []
+
+        self._prepared_stmt = _SQLAssembler(self)
+
+        self._to_execute = defaultdict(list)
 
     def stmt(self):
-        return self._prepared_stmt.start()
+        return self._prepared_stmt.call_as('PIPE')
 
     def commit(self):
         self._conn.commit()
@@ -170,7 +155,7 @@ class Connection(object):
         self._to_execute.clear()
 
     def update(self):
-        row_ids = [self.rep_query(stmt, values) for stmt, values in self._to_execute]
+        row_ids = [self.rep_query(stmt, values) for stmt, values in self._to_execute.items()]
         self.clear()
         return row_ids
 
@@ -185,12 +170,14 @@ class Connection(object):
             return x
         if values is None:
             self._cursor.execute(stmt)
-            return _result(self, self._cursor.column_names, self._cursor.fetchall(), type_norm)
-        self._to_execute.append((stmt, [values]))
-        return None
+            return _ResultSet(self,
+                              [list(map(type_norm, row)) for row in self._cursor.fetchall()],
+                              {name: index for index, name in enumerate(self._cursor.column_names)})
+        self._to_execute[stmt].extend(values)
 
     def rep_query(self, stmt, values):
-        self._cursor.executemany('{} VALUES ({});'.format(stmt, ', '.join(['%s'] * len(values[0]))), values)
+        stmt = '{} VALUES ({});'.format(stmt, ', '.join(['%s'] * len(values)))
+        self._cursor.executemany(stmt, values)
         return self._cursor.getlastrowid()
 
 
@@ -200,8 +187,25 @@ CONN = Connection(username=U_NAME,
                   db_name=DB_NAME)
 
 if __name__ == '__main__':
-    for r in CONN.stmt()\
-                ('SELECT')('*')\
-                ('FROM')('subscription')\
-                ().merge('_', ('{}_' * 3).format, 'client', 'code', 'service'):
-        print(r)
+    thing = CONN.stmt()\
+                     ('SELECT')('name', 'service')\
+                     ('FROM')('clients')\
+                     ('MEMES')('DAT', 'BOI')\
+                     ('WHERE')(o(name='Benoit', surname='Balls'))(';')()
+
+    print('\n$', thing)
+    print('\npath:')
+    for e in CONN.stmt().path:
+        print('-', e)
+
+    print('\nloci:')
+    for e in CONN.stmt().loci:
+        print('-', e)
+
+    print('\nlogs:')
+    for e in CONN.stmt().logs:
+        print('-', e)
+
+    print('\ndump:')
+    for e in CONN.stmt().dump:
+        print('-', *e)
